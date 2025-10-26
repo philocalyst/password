@@ -1,62 +1,99 @@
-/// A Ratatui example that demonstrates a basic hello world application.
-///
-/// This example runs with the Ratatui library code in the branch that you are currently
-/// reading. See the [`latest`] branch for the code which works with the most recent Ratatui
-/// release.
-///
-/// [`latest`]: https://github.com/ratatui/ratatui/tree/latest
-use std::time::Duration;
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
-use color_eyre::Result;
-use color_eyre::eyre::Context;
-use crossterm::event::{self, KeyCode};
-use ratatui::widgets::Paragraph;
-use ratatui::{DefaultTerminal, Frame};
+use color_eyre::eyre::{Context, Result};
+use crossterm::{
+    event::{self, Event, KeyCode},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Borders, Paragraph},
+};
 
-/// This is a bare minimum example. There are many approaches to running an application loop, so
-/// this is not meant to be prescriptive. It is only meant to demonstrate the basic setup and
-/// teardown of a terminal application.
-///
-/// This example does not handle events or update the application state. It just draws a greeting
-/// and exits when the user presses 'q'.
-fn main() -> Result<()> {
-    color_eyre::install()?; // augment errors / panics with easy to read messages
-    ratatui::run(run).context("failed to run app")
+/// Application state. Can be expanded later with UI data.
+struct App {
+    should_quit: bool,
+    last_tick: Instant,
 }
 
-/// Run the application loop. This is where you would handle events and update the application
-/// state. This example exits when the user presses 'q'. Other styles of application loops are
-/// possible, for example, you could have multiple application states and switch between them based
-/// on events, or you could have a single application state and update it based on events.
-fn run(terminal: &mut DefaultTerminal) -> Result<()> {
-    loop {
-        terminal.draw(render)?;
-        if should_quit()? {
-            break;
+impl App {
+    /// Create a new instance with default values.
+    fn new() -> Self {
+        Self {
+            should_quit: false,
+            last_tick: Instant::now(),
         }
     }
-    Ok(())
-}
 
-/// Render the application. This is where you would draw the application UI. This example draws a
-/// greeting.
-fn render(frame: &mut Frame) {
-    let greeting = Paragraph::new("Hello World! (press 'q' to quit)");
-    frame.render_widget(greeting, frame.area());
-}
+    /// Run the main event loop until `should_quit` becomes true.
+    fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+        const TICK_RATE: Duration = Duration::from_millis(1000);
 
-/// Check if the user has pressed 'q'. This is where you would handle events. This example just
-/// checks if the user has pressed 'q' and returns true if they have. It does not handle any other
-/// events. There is a 250ms timeout on the event poll to ensure that the terminal is rendered at
-/// least once every 250ms. This allows you to do other work in the application loop, such as
-/// updating the application state, without blocking the event loop for too long.
-fn should_quit() -> Result<bool> {
-    if event::poll(Duration::from_millis(1000)).context("event poll failed")? {
-        let q_pressed = event::read()
-            .context("event read failed")?
-            .as_key_press_event()
-            .is_some_and(|key| key.code == KeyCode::Char('q'));
-        return Ok(q_pressed);
+        while !self.should_quit {
+            terminal
+                .draw(|f| self.render(f))
+                .context("failed to draw frame")?;
+
+            // Handle input with timeout
+            if event::poll(TICK_RATE).context("failed to poll events")? {
+                if let Event::Key(key_event) =
+                    event::read().context("failed to read event from terminal")?
+                {
+                    self.handle_key(key_event);
+                }
+            }
+        }
+
+        Ok(())
     }
-    Ok(false)
+
+    /// Render the frame each loop iteration.
+    fn render(&self, frame: &mut Frame) {
+        let area = frame.area();
+
+        let block = Block::default()
+            .title("Ratatui Example")
+            .borders(Borders::ALL);
+
+        let text = Paragraph::new("Hello World! (press 'q' to quit)").block(block);
+        frame.render_widget(text, area);
+    }
+
+    /// Handle key input and update state.
+    fn handle_key(&mut self, key_event: event::KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+            _ => {}
+        }
+    }
+}
+
+/// Entry point: initializes terminal and runs the app safely.
+fn main() -> Result<()> {
+    color_eyre::install()?;
+
+    enable_raw_mode().context("failed to enable raw mode")?;
+    let stdout = io::stdout();
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
+
+    let res = run_app(&mut terminal);
+
+    // Always restore terminal state before exiting, even on errors
+    disable_raw_mode().ok();
+    terminal.show_cursor().ok();
+
+    res
+}
+
+/// Create and run the app with proper error bubbling.
+fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+    // Clear any existing content on the screen
+    terminal.clear().context("failed to clear terminal")?;
+
+    let mut app = App::new();
+    app.run(terminal).context("application run failed")
 }
