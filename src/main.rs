@@ -10,7 +10,7 @@ use crossterm::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, List, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
 /// Application state. Can be expanded later with UI data.
@@ -30,8 +30,36 @@ enum Item {
 }
 
 struct Simple {
+    account: String,
     username: String,
     password: String,
+}
+
+impl<'a> From<&'a PasswordStore> for List<'a> {
+    fn from(store: &'a PasswordStore) -> Self {
+        let list_items: Vec<ListItem<'a>> = store
+            .items
+            .iter()
+            .map(|item| {
+                match item {
+                    Item::Simple(simple) => {
+                        // Build the text that will appear in the list
+                        let line = Line::from(vec![
+                            Span::styled(&simple.account, Style::default().fg(Color::Green)),
+                            Span::raw(" | "),
+                            Span::styled(&simple.username, Style::default().fg(Color::Cyan)),
+                        ]);
+
+                        ListItem::new(line)
+                    }
+                }
+            })
+            .collect();
+
+        List::new(list_items)
+            .highlight_symbol("> ")
+            .highlight_style(Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+    }
 }
 
 impl App {
