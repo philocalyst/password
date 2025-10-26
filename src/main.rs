@@ -115,7 +115,14 @@ impl App {
 
     /// Render the frame each loop iteration.
     fn render(&self, frame: &mut Frame) {
-        let area = frame.area();
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref());
+
+        // Apply layout to the full terminal area
+        let [area1, area2] = layout.split(frame.area())[..] else {
+            panic!("Expected 2 layout regions");
+        };
 
         // A simple frame for our display
         let block = Block::default()
