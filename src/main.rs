@@ -10,21 +10,25 @@ use crossterm::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, List, ListState, Paragraph},
 };
 
 /// Application state. Can be expanded later with UI data.
 struct App {
     should_quit: bool,
-    last_tick: Instant,
+    list: ListState,
 }
 
 impl App {
     /// Create a new instance with default values.
     fn new() -> Self {
+        // Define the default selected item (the first)
+        let mut list = ListState::default();
+        list.select(Some(0usize));
+
         Self {
             should_quit: false,
-            last_tick: Instant::now(),
+            list,
         }
     }
 
@@ -58,8 +62,13 @@ impl App {
             .title("Ratatui Example")
             .borders(Borders::ALL);
 
-        let text = Paragraph::new("Hello World! (press 'q' to quit)").block(block);
-        frame.render_widget(text, area);
+        let list = List::default()
+            .items(["test1", "test2"])
+            .highlight_symbol(">")
+            .highlight_style(Style::new().bold().green())
+            .block(block);
+
+        frame.render_stateful_widget(list, area, &mut self.list.clone());
     }
 
     /// Handle key input and update state.
