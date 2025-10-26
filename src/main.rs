@@ -35,30 +35,30 @@ struct Simple {
     password: String,
 }
 
-impl<'a> From<&'a PasswordStore> for List<'a> {
-    fn from(store: &'a PasswordStore) -> Self {
-        let list_items: Vec<ListItem<'a>> = store
-            .items
-            .iter()
-            .map(|item| {
-                match item {
-                    Item::Simple(simple) => {
-                        // Build the text that will appear in the list
-                        let line = Line::from(vec![
-                            Span::styled(&simple.account, Style::default().fg(Color::Green)),
-                            Span::raw(" | "),
-                            Span::styled(&simple.username, Style::default().fg(Color::Cyan)),
-                        ]);
+struct ItemList<'a>(&'a [Item]);
 
-                        ListItem::new(line)
-                    }
+impl<'a> From<ItemList<'a>> for List<'a> {
+    fn from(items: ItemList<'a>) -> Self {
+        let list_items: Vec<ListItem<'a>> = items
+            .0
+            .iter()
+            .map(|item| match item {
+                Item::Simple(Simple {
+                    account, username, ..
+                }) => {
+                    let line = Line::from(vec![
+                        Span::styled(account, Style::default().fg(Color::Green)),
+                        Span::raw(" | "),
+                        Span::styled(username, Style::default().fg(Color::Cyan)),
+                    ]);
+                    ListItem::new(line)
                 }
             })
             .collect();
 
         List::new(list_items)
             .highlight_symbol("> ")
-            .highlight_style(Style::default().add_modifier(ratatui::style::Modifier::BOLD))
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
     }
 }
 
@@ -107,11 +107,7 @@ impl App {
             .title("Ratatui Example")
             .borders(Borders::ALL);
 
-        let list = List::default()
-            .items(["test1", "test2"])
-            .highlight_symbol(">")
-            .highlight_style(Style::new().bold().green())
-            .block(block);
+        let list: List = ItemList(&self.store.items).into();
 
         // Get the list state (Not possible for an unselect to occur)
         let selected_item_idx = self.list_state.selected().unwrap();
