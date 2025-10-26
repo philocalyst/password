@@ -74,9 +74,6 @@ impl App {
     fn render(&self, frame: &mut Frame) {
         let area = frame.area();
 
-        // Get the list state
-        _ = self.list_state.selected();
-
         // A simple frame for our display
         let block = Block::default()
             .title("Ratatui Example")
@@ -87,6 +84,12 @@ impl App {
             .highlight_symbol(">")
             .highlight_style(Style::new().bold().green())
             .block(block);
+
+        // Get the list state (Not possible for an unselect to occur)
+        let selected_item_idx = self.list_state.selected().unwrap();
+
+        // Determine the item to render (Should always associate with item)
+        let selected_item = self.store.items.get(selected_item_idx).unwrap();
 
         // Pass a snapshot of the state at the time to render
         frame.render_stateful_widget(list, area, &mut self.list_state.clone());
