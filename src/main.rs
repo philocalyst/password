@@ -71,7 +71,22 @@ impl App {
 
         Self {
             should_quit: false,
-            store: PasswordStore::default(),
+            store: PasswordStore {
+                items: {
+                    vec![
+                        Item::Simple(Simple {
+                            account: "GitHub".into(),
+                            username: "alice".into(),
+                            password: "secret".into(),
+                        }),
+                        Item::Simple(Simple {
+                            account: "Reddit".into(),
+                            username: "bob".into(),
+                            password: "password".into(),
+                        }),
+                    ]
+                },
+            },
             list_state: list,
         }
     }
