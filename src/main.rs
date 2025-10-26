@@ -16,7 +16,22 @@ use ratatui::{
 /// Application state. Can be expanded later with UI data.
 struct App {
     should_quit: bool,
-    list: ListState,
+    store: PasswordStore,
+    list_state: ListState,
+}
+
+#[derive(Default)]
+struct PasswordStore {
+    items: Vec<Item>,
+}
+
+enum Item {
+    Simple(Simple),
+}
+
+struct Simple {
+    username: String,
+    password: String,
 }
 
 impl App {
@@ -28,7 +43,8 @@ impl App {
 
         Self {
             should_quit: false,
-            list,
+            store: PasswordStore::default(),
+            list_state: list,
         }
     }
 
@@ -58,6 +74,10 @@ impl App {
     fn render(&self, frame: &mut Frame) {
         let area = frame.area();
 
+        // Get the list state
+        _ = self.list_state.selected();
+
+        // A simple frame for our display
         let block = Block::default()
             .title("Ratatui Example")
             .borders(Borders::ALL);
@@ -68,7 +88,8 @@ impl App {
             .highlight_style(Style::new().bold().green())
             .block(block);
 
-        frame.render_stateful_widget(list, area, &mut self.list.clone());
+        // Pass a snapshot of the state at the time to render
+        frame.render_stateful_widget(list, area, &mut self.list_state.clone());
     }
 
     /// Handle key input and update state.
