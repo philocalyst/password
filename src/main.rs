@@ -451,9 +451,29 @@ impl<'a> App<'a> {
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
 		match key_event.code {
 			KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-			KeyCode::Down => self.list_state.select_next(),
-			KeyCode::Up => self.list_state.select_previous(),
+			KeyCode::Down => self.cycle_forward(),
+			KeyCode::Up => self.cycle_backward(),
 			_ => {}
+		}
+	}
+
+	fn cycle_forward(&mut self) {
+		let current_position = self.list_state.selected().unwrap();
+
+		if self.store.items.len() - 1 == current_position {
+			self.list_state.select_first();
+		} else {
+			self.list_state.select_next();
+		}
+	}
+
+	fn cycle_backward(&mut self) {
+		let current_position = self.list_state.selected().unwrap();
+
+		if 0 == current_position {
+			self.list_state.select_last();
+		} else {
+			self.list_state.select_previous();
 		}
 	}
 }
