@@ -1,4 +1,4 @@
-use std::{fs::read, io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
+use std::{collections::HashMap, fs::read, io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
@@ -38,7 +38,7 @@ enum Components {
 
 #[derive(Default)]
 struct PasswordStore<'a> {
-	items: Vec<Item<'a>>,
+	items: HashMap<String, Item<'a>>,
 }
 
 #[derive(Deserialize)]
@@ -66,21 +66,30 @@ enum AuthProvider {
 #[derive(Deserialize)]
 struct OnlineAccount<'a> {
 	#[serde(skip)]
-	account:            String,
-	username:           Option<String>,
-	email:              Option<EmailAddress>,
-	phone:              Option<PhoneNumber>,
-	sign_in_with:       Option<Vec<AuthProvider>>,
-	password:           Option<String>,
-	status:             Option<AccountStatus>,
-	host_website:       Option<Url>,
-	login_pages:        Option<Vec<Url>>,
-	security_questions: Option<Vec<SecurityQuestion>>,
-	date_created:       Option<Date>,
-	two_factor_enabled: Option<bool>,
+	account:               String,
+	username:              Option<String>,
+	email:                 Option<EmailAddress>,
+	phone:                 Option<PhoneNumber>,
+	sign_in_with:          Option<Vec<AuthProvider>>,
+	password:              Option<String>,
+	status:                Option<AccountStatus>,
+	host_website:          Option<Url>,
+	login_pages:           Option<Vec<Url>>,
+	security_questions:    Option<Vec<SecurityQuestion>>,
+	date_created:          Option<Date>,
+	two_factor_enabled:    Option<bool>,
+	#[serde(default, rename = "associated_items")]
+	associated_item_names: Vec<String>, // Temporarily store names
 	#[serde(skip)]
-	associated_items:   Vec<&'a Item<'a>>,
-	notes:              Option<String>,
+	associated_items:      Vec<&'a Item<'a>>,
+	notes:                 Option<String>,
+}
+
+impl<'a> OnlineAccount<'a> {
+	fn resolve_associations(&mut self, item_map: &'a HashMap<String, Item<'a>>) {
+		self.associated_items =
+			self.associated_item_names.iter().filter_map(|name| item_map.get(name.as_str())).collect();
+	}
 }
 
 #[derive(Deserialize)]
@@ -95,6 +104,7 @@ struct SecurityQuestion {
 	answer:   String,
 }
 
+#[derive(Clone)]
 struct ItemList<'a>(&'a HashMap<String, Item<'a>>);
 struct ItemDetailView<'a>(&'a Item<'a>);
 
@@ -363,7 +373,6 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 				ListItem::new(line)
 			})
 			.collect();
-
 		List::new(list_items)
 			.highlight_symbol("> ")
 			.highlight_style(Style::default().add_modifier(Modifier::BOLD))
@@ -425,13 +434,15 @@ impl<'a> App<'a> {
 		// A simple frame for our display
 		let block = Block::default().title("Ratatui Example").borders(Borders::ALL);
 
-		let list: List = ItemList(&self.store.items).into();
+		let item_list = ItemList(&self.store.items);
+
+		let list: List = item_list.clone().into();
 
 		// Get the list state (Not possible for an unselect to occur)
 		let selected_item_idx = self.list_state.selected().unwrap();
 
 		// Determine the item to render (Should always associate with item)
-		let selected_item = self.store.items.get(selected_item_idx).unwrap();
+		let selected_item = item_list.get_by_index(selected_item_idx).unwrap().1;
 
 		// Pass a snapshot of the state at the time to render
 		frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
