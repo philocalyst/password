@@ -797,12 +797,46 @@ impl<'a> ItemList<'a> {
 }
 
 impl App {
+	fn get_current_item(&self) -> &Item {
+		let selected_idx = self.list_state.selected().unwrap();
+
+		// Sort the keys to match the list order
+		let mut sorted_keys: Vec<&String> = self.store.items.keys().collect();
+		sorted_keys.sort();
+
+		// Get the key at the selected index
+		let key = sorted_keys[selected_idx];
+
+		// Return the item
+		&self.store.items[key]
+	}
+
+	/// Get the first focusable field for the current item
+	fn get_first_field_for_current_item(&self) -> Option<FocusableField> {
+		let item = self.get_current_item();
+		let detail_view = ItemDetailView { item, focused_field: None };
+		let fields = detail_view.get_available_fields();
+		fields.first().copied()
+	}
+
+	fn focus_next_field(&mut self) {
+		let item = self.get_current_item();
+		let mut detail_view = ItemDetailView { item, focused_field: self.detail_focused_field };
+		detail_view.focus_next();
+		self.detail_focused_field = detail_view.focused_field;
+	}
+
+	fn focus_prev_field(&mut self) {
+		let item = self.get_current_item();
+		let mut detail_view = ItemDetailView { item, focused_field: self.detail_focused_field };
+		detail_view.focus_prev();
+		self.detail_focused_field = detail_view.focused_field;
+	}
+
 	/// Create a new instance with default values.
 	fn new() -> Self {
-		// Define the default selected item (the first)
 		let mut list = ListState::default();
 		list.select(Some(0usize));
-
 		let store = load_from_store(PathBuf::from("./store")).unwrap();
 
 		Self {
@@ -860,17 +894,34 @@ impl App {
 
 		// Pass a snapshot of the state at the time to render
 		frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
-		ItemDetailView { item: selected_item, focused_field: Some(FocusableField::Password) }
+		ItemDetailView { item: selected_item, focused_field: self.detail_focused_field }
 			.render(frame, area2);
 	}
 
-	/// Handle key input and update state.
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
-		match key_event.code {
-			KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-			KeyCode::Down | KeyCode::Char('j') => self.cycle_forward(),
-			KeyCode::Up | KeyCode::Char('k') => self.cycle_backward(),
-			_ => {}
+		match self.focused {
+			Components::List => {
+				match key_event.code {
+					KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+					KeyCode::Down | KeyCode::Char('j') => self.cycle_forward(),
+					KeyCode::Up | KeyCode::Char('k') => self.cycle_backward(),
+					KeyCode::Enter | KeyCode::Right => {
+						self.focused = Components::Content;
+						// Initialize with first field
+						self.detail_focused_field = self.get_first_field_for_current_item();
+					}
+					_ => {}
+				}
+			}
+			Components::Content => match key_event.code {
+				KeyCode::Char('q') | KeyCode::Esc | KeyCode::Left => {
+					self.focused = Components::List;
+					self.detail_focused_field = None;
+				}
+				KeyCode::Down | KeyCode::Char('j') => self.focus_next_field(),
+				KeyCode::Up | KeyCode::Char('k') => self.focus_prev_field(),
+				_ => {}
+			},
 		}
 	}
 
