@@ -471,7 +471,7 @@ impl<'a> App<'a> {
 		let current_position = self.list_state.selected().unwrap();
 
 		if 0 == current_position {
-			self.list_state.select_last();
+			self.list_state.select(Some(self.store.items.len() - 1));
 		} else {
 			self.list_state.select_previous();
 		}
