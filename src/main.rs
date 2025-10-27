@@ -7,10 +7,21 @@ use email_address::EmailAddress;
 use human_name::Name;
 use jiff::civil::Date;
 use phonenumber::PhoneNumber;
-use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
+use ratatui::{layout::Rect, prelude::*, symbols::border::Set, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
 use serde::{Deserialize, de::DeserializeSeed};
 use url::Url;
 use walkdir::WalkDir;
+
+const WONKY_SET: Set = Set {
+	top_left:          "╭",
+	top_right:         "╮",
+	bottom_left:       "╰",
+	bottom_right:      "╯",
+	vertical_left:     "║",
+	vertical_right:    "║",
+	horizontal_top:    "═",
+	horizontal_bottom: "═",
+};
 
 fn deserialize_name<'de, D>(deserializer: D) -> Result<Option<Name>, D::Error>
 where
@@ -313,11 +324,14 @@ impl<'a> ItemDetailView<'a> {
 				Style::default().fg(Color::DarkGray)
 			};
 
-			let widget = Paragraph::new(Line::from(vec![
-				Span::styled("Username: ", label_style),
-				Span::styled(username.as_str(), value_style),
-			]))
-			.block(Block::default().borders(Borders::ALL).border_style(border_style));
+			let widget = Paragraph::new(Line::from(vec![Span::styled(username.as_str(), value_style)]))
+				.block(
+					Block::default()
+						.borders(Borders::ALL)
+						.title("USERNAME")
+						.title_style(Style::new().white())
+						.border_style(border_style),
+				);
 			frame.render_widget(widget, chunks[chunk_idx]);
 			chunk_idx += 1;
 		}
@@ -373,11 +387,8 @@ impl<'a> ItemDetailView<'a> {
 				"••••••••••••••••"
 			};
 
-			let widget = Paragraph::new(Line::from(vec![
-				Span::styled("Password: ", label_style),
-				Span::styled(display_text, value_style),
-			]))
-			.block(Block::default().borders(Borders::ALL).border_style(border_style));
+			let widget = Paragraph::new(Line::from(vec![Span::styled(display_text, value_style)]))
+				.block(Block::default().borders(Borders::ALL).title("PASSWORD").border_style(border_style));
 			frame.render_widget(widget, chunks[chunk_idx]);
 			chunk_idx += 1;
 		}
@@ -426,7 +437,8 @@ impl<'a> ItemDetailView<'a> {
 					Block::default()
 						.borders(Borders::ALL)
 						.border_style(border_style)
-						.title(" 📝 Notes ")
+						.title("ℕ𝕠𝕥𝕖𝕤")
+						.border_set(WONKY_SET)
 						.title_style(title_style),
 				)
 				.wrap(Wrap { trim: true })
