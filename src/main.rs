@@ -16,7 +16,7 @@ use phonenumber::PhoneNumber;
 use ratatui::{
     layout::Rect,
     prelude::*,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 use url::Url;
 
@@ -79,6 +79,343 @@ struct SecurityQuestion {
 struct ItemList<'a>(&'a [Item<'a>]);
 struct ItemDetailView<'a>(&'a Item<'a>);
 
+impl<'a> ItemDetailView<'a> {
+    fn render(&self, frame: &mut Frame, area: Rect) {
+        match self.0 {
+            Item::OnlineAccount(account) => self.render_online_account(frame, area, account),
+            Item::SocialSecurity(ssn) => self.render_social_security(frame, area, ssn),
+        }
+    }
+
+    fn render_online_account(&self, frame: &mut Frame, area: Rect, account: &OnlineAccount) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Header
+                Constraint::Min(10),   // Main content
+                Constraint::Length(5), // Notes section
+            ])
+            .split(area);
+
+        // Header with account name
+        let header = Paragraph::new(Line::from(vec![
+            Span::styled("🔐 ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                &account.account,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(" Online Account ")
+                .title_style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+        );
+        frame.render_widget(header, chunks[0]);
+
+        // Main content area - split into two columns
+        let content_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(chunks[1]);
+
+        // Left column - Credentials
+        let mut cred_lines = vec![Line::from(vec![
+            Span::styled(
+                "Username: ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                account.username.as_deref().unwrap_or("N/A"),
+                Style::default().fg(Color::White),
+            ),
+        ])];
+
+        if let Some(email) = &account.email {
+            cred_lines.push(Line::from(vec![
+                Span::styled(
+                    "Email: ",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(email.to_string(), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        if let Some(phone) = &account.phone {
+            cred_lines.push(Line::from(vec![
+                Span::styled(
+                    "Phone: ",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(phone.to_string(), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        if let Some(password) = &account.password {
+            let masked = "•".repeat(password.len().min(16));
+            cred_lines.push(Line::from(vec![
+                Span::styled(
+                    "Password: ",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(masked, Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+
+        if let Some(website) = &account.website {
+            cred_lines.push(Line::from(""));
+            cred_lines.push(Line::from(vec![
+                Span::styled("🌐 ", Style::default().fg(Color::Blue)),
+                Span::styled(
+                    website.to_string(),
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(Modifier::UNDERLINED),
+                ),
+            ]));
+        }
+
+        let credentials = Paragraph::new(cred_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Green))
+                    .title(" Credentials ")
+                    .title_style(Style::default().fg(Color::Green)),
+            )
+            .wrap(Wrap { trim: true });
+        frame.render_widget(credentials, content_chunks[0]);
+
+        // Right column - Security & Status
+        let mut security_lines = vec![];
+
+        if let Some(status) = &account.status {
+            let (status_text, status_color) = match status {
+                AccountStatus::Active => ("● ACTIVE", Color::Green),
+                AccountStatus::Deactivated => ("○ DEACTIVATED", Color::Red),
+            };
+            security_lines.push(Line::from(vec![
+                Span::styled(
+                    "Status: ",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    status_text,
+                    Style::default()
+                        .fg(status_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+
+        if let Some(two_fa) = account.two_factor_enabled {
+            let (icon, color) = if two_fa {
+                ("✓", Color::Green)
+            } else {
+                ("✗", Color::Red)
+            };
+            security_lines.push(Line::from(vec![
+                Span::styled(
+                    "2FA: ",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    icon,
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    if two_fa { " Enabled" } else { " Disabled" },
+                    Style::default().fg(color),
+                ),
+            ]));
+        }
+
+        if let Some(providers) = &account.sign_in_with {
+            if !providers.is_empty() {
+                security_lines.push(Line::from(""));
+                security_lines.push(Line::from(Span::styled(
+                    "Sign in with:",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                )));
+                for provider in providers {
+                    let (icon, name, color) = match provider {
+                        AuthProvider::Google => ("G", "Google", Color::Red),
+                        AuthProvider::Apple => ("", "Apple", Color::White),
+                        AuthProvider::Facebook => ("f", "Facebook", Color::Blue),
+                    };
+                    security_lines.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(
+                            icon,
+                            Style::default().fg(color).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(name, Style::default().fg(color)),
+                    ]));
+                }
+            }
+        }
+
+        if let Some(date) = &account.date_created {
+            security_lines.push(Line::from(""));
+            security_lines.push(Line::from(vec![
+                Span::styled(
+                    "Created: ",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(date.to_string(), Style::default().fg(Color::Gray)),
+            ]));
+        }
+
+        if let Some(questions) = &account.security_questions {
+            security_lines.push(Line::from(""));
+            security_lines.push(Line::from(Span::styled(
+                format!("Security Questions: {}", questions.len()),
+                Style::default().fg(Color::Yellow),
+            )));
+        }
+
+        let security = Paragraph::new(security_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Magenta))
+                    .title(" Security ")
+                    .title_style(Style::default().fg(Color::Magenta)),
+            )
+            .wrap(Wrap { trim: true });
+        frame.render_widget(security, content_chunks[1]);
+
+        // Notes section
+        if let Some(notes) = &account.notes {
+            let notes_widget = Paragraph::new(notes.as_str())
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Yellow))
+                        .title(" 📝 Notes ")
+                        .title_style(Style::default().fg(Color::Yellow)),
+                )
+                .wrap(Wrap { trim: true })
+                .style(Style::default().fg(Color::Gray));
+            frame.render_widget(notes_widget, chunks[2]);
+        }
+    }
+
+    fn render_social_security(&self, frame: &mut Frame, area: Rect, ssn: &SocialSecurity) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Header
+                Constraint::Min(8),    // Content
+            ])
+            .split(area);
+
+        // Header
+        let header = Paragraph::new(Line::from(vec![
+            Span::styled("🛡️  ", Style::default().fg(Color::Red)),
+            Span::styled(
+                "Social Security Number",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red))
+                .title(" Sensitive Information ")
+                .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        );
+        frame.render_widget(header, chunks[0]);
+
+        // Content
+        let mut lines = vec![Line::from(vec![
+            Span::styled(
+                "Account Number: ",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(
+                    "***-**-{}",
+                    &ssn.account_number[ssn.account_number.len().saturating_sub(4)..]
+                ),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])];
+
+        if let Some(name) = &ssn.legal_name {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Legal Name: ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(name.display_full(), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        if let Some(country) = &ssn.country_of_issue {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Country: ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(country.to_string(), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        if let Some(date) = &ssn.issuance_date {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Issued: ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(date.to_string(), Style::default().fg(Color::Gray)),
+            ]));
+        }
+
+        let content = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    .title(" ⚠️  CONFIDENTIAL ")
+                    .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            )
+            .wrap(Wrap { trim: true });
+        frame.render_widget(content, chunks[1]);
+    }
+}
+
 impl<'a> From<ItemList<'a>> for List<'a> {
     fn from(items: ItemList<'a>) -> Self {
         let list_items: Vec<ListItem<'a>> = items
@@ -91,10 +428,11 @@ impl<'a> From<ItemList<'a>> for List<'a> {
                     let line = Line::from(vec![
                         Span::styled(account, Style::default().fg(Color::Green)),
                         Span::raw(" | "),
-                        Span::styled(username, Style::default().fg(Color::Cyan)),
+                        Span::styled(username.clone().unwrap(), Style::default().fg(Color::Cyan)),
                     ]);
                     ListItem::new(line)
                 }
+                Item::SocialSecurity(social_security) => todo!(),
             })
             .collect();
 
