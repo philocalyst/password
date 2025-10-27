@@ -898,6 +898,16 @@ impl App {
 			.render(frame, area2);
 	}
 
+	fn copy_field(&self) -> Result<()> {
+		use arboard;
+
+		let mut clipboard = arboard::Clipboard::new()?;
+
+		clipboard.set_text("OH")?;
+
+		Ok(())
+	}
+
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
 		match self.focused {
 			Components::List => {
