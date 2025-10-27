@@ -95,7 +95,7 @@ struct SecurityQuestion {
 	answer:   String,
 }
 
-struct ItemList<'a>(&'a [Item<'a>]);
+struct ItemList<'a>(&'a HashMap<String, Item<'a>>);
 struct ItemDetailView<'a>(&'a Item<'a>);
 
 impl<'a> ItemDetailView<'a> {
@@ -353,22 +353,10 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 		let list_items: Vec<ListItem<'a>> = items
 			.0
 			.iter()
-			.map(|item| match item {
-				Item::OnlineAccount(OnlineAccount { account, username, .. }) => {
-					let line = Line::from(vec![
-						Span::styled(account, Style::default().fg(Color::Green)),
-						Span::raw(" | "),
-						Span::styled(username.clone().unwrap(), Style::default().fg(Color::Cyan)),
-					]);
-					ListItem::new(line)
-				}
-				Item::SocialSecurity(social_security) => {
-					let line = Line::from(vec![
-						Span::styled("hi", Style::default().fg(Color::Green)),
-						Span::raw(" | "),
-					]);
-					ListItem::new(line)
-				}
+			.map(|(name, _)| {
+				let line =
+					Line::from(vec![Span::styled(name, Style::default().fg(Color::Green)), Span::raw(" | ")]);
+				ListItem::new(line)
 			})
 			.collect();
 
@@ -385,50 +373,9 @@ impl<'a> App<'a> {
 		let mut list = ListState::default();
 		list.select(Some(0usize));
 
-		Self {
-			should_quit: false,
-			focused:     Components::List,
-			store:       PasswordStore {
-				items: {
-					vec![
-						Item::OnlineAccount(OnlineAccount {
-							account:            "GitHub".into(),
-							username:           Some("alice_codes".into()),
-							email:              Some("alice@example.com".parse().unwrap()),
-							phone:              Some("+1-555-0123".parse().unwrap()),
-							sign_in_with:       Some(vec![AuthProvider::Google, AuthProvider::Apple]),
-							password:           Some("correct-horse-battery-staple".into()),
-							status:             Some(AccountStatus::Active),
-							host_website:       Some("https://github.com".parse().unwrap()),
-							security_questions: Some(vec![
-								SecurityQuestion {
-									question: "What was your first pet's name?".into(),
-									answer:   "Fluffy".into(),
-								},
-								SecurityQuestion {
-									question: "What city were you born in?".into(),
-									answer:   "Springfield".into(),
-								},
-							]),
-							date_created:       Some("2020-03-15".parse().unwrap()),
-							two_factor_enabled: Some(true),
-							associated_items:   vec![],
-							notes:              Some(
-								"Primary development account. Remember to rotate SSH keys quarterly.".into(),
-							),
-							login_pages:        Some(vec![]),
-						}),
-						Item::SocialSecurity(SocialSecurity {
-							account_number:   "123-45-6789".into(),
-							legal_name:       Some(Name::parse("Alice Marie Johnson").unwrap()),
-							issuance_date:    Some("1995-06-12".parse().unwrap()),
-							country_of_issue: Some("United States".parse().unwrap()),
-						}),
-					]
-				},
-			},
-			list_state:  list,
-		}
+		let store = load_from_store(PathBuf::from("../store")).unwrap();
+
+		Self { should_quit: false, focused: Components::List, store, list_state: list }
 	}
 
 	/// Run the main event loop until `should_quit` becomes true.
@@ -512,7 +459,7 @@ impl<'a> App<'a> {
 fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 	use walkdir;
 
-	let mut items: Vec<Item<'a>> = vec![];
+	let mut items: HashMap<String, Item<'a>> = HashMap::default();
 
 	for entry in WalkDir::new(store_path) {
 		let entry = entry?;
@@ -526,7 +473,7 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 		// Derive the account, which is practically just the filename
 		raw_item.account = entry.into_path().to_string_lossy().into();
 
-		items.push(Item::OnlineAccount(raw_item));
+		items.insert(identification, Item::OnlineAccount(raw_item));
 	}
 
 	Ok(PasswordStore { items })
