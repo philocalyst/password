@@ -442,7 +442,7 @@ impl<'a> From<ItemList<'a>> for List<'a> {
     }
 }
 
-impl App {
+impl<'a> App<'a> {
     /// Create a new instance with default values.
     fn new() -> Self {
         // Define the default selected item (the first)
@@ -453,18 +453,33 @@ impl App {
             should_quit: false,
             store: PasswordStore {
                 items: {
-                    vec![
-                        Item::OnlineAccount(OnlineAccount {
-                            account: "GitHub".into(),
-                            username: "alice".into(),
-                            password: "secret".into(),
-                        }),
-                        Item::OnlineAccount(OnlineAccount {
-                            account: "Reddit".into(),
-                            username: "bob".into(),
-                            password: "password".into(),
-                        }),
-                    ]
+                    vec![Item::OnlineAccount(OnlineAccount {
+                        account: "GitHub".into(),
+                        username: Some("alice_codes".into()),
+                        email: Some("alice@example.com".parse().unwrap()),
+                        phone: Some("+1-555-0123".parse().unwrap()),
+                        sign_in_with: Some(vec![AuthProvider::Google, AuthProvider::Apple]),
+                        password: Some("correct-horse-battery-staple".into()),
+                        status: Some(AccountStatus::Active),
+                        website: Some("https://github.com".parse().unwrap()),
+                        security_questions: Some(vec![
+                            SecurityQuestion {
+                                question: "What was your first pet's name?".into(),
+                                answer: "Fluffy".into(),
+                            },
+                            SecurityQuestion {
+                                question: "What city were you born in?".into(),
+                                answer: "Springfield".into(),
+                            },
+                        ]),
+                        date_created: Some("2020-03-15".parse().unwrap()),
+                        two_factor_enabled: Some(true),
+                        associated_items: vec![],
+                        notes: Some(
+                            "Primary development account. Remember to rotate SSH keys quarterly."
+                                .into(),
+                        ),
+                    })]
                 },
             },
             list_state: list,
@@ -517,11 +532,9 @@ impl App {
         // Determine the item to render (Should always associate with item)
         let selected_item = self.store.items.get(selected_item_idx).unwrap();
 
-        let text = Text::raw("hi");
-
         // Pass a snapshot of the state at the time to render
         frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
-        frame.render_widget(text, area2);
+        ItemDetailView(selected_item).render(frame, area2);
     }
 
     /// Handle key input and update state.
