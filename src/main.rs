@@ -354,7 +354,7 @@ impl<'a> App<'a> {
 	fn new() -> Self {
 		// Define the default selected item (the first)
 		let mut list = ListState::default();
-		list.select(Some(1usize));
+		list.select(Some(0usize));
 
 		Self {
 			should_quit: false,
@@ -451,6 +451,8 @@ impl<'a> App<'a> {
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
 		match key_event.code {
 			KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
+			KeyCode::Down => self.list_state.select_next(),
+			KeyCode::Up => self.list_state.select_previous(),
 			_ => {}
 		}
 	}
