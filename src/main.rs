@@ -8,7 +8,19 @@ use human_name::Name;
 use jiff::civil::Date;
 use phonenumber::PhoneNumber;
 use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
+use serde::Deserialize;
 use url::Url;
+
+fn deserialize_name<'de, D>(deserializer: D) -> Result<Option<Name>, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	let s: Option<String> = Option::deserialize(deserializer)?;
+	match s {
+		Some(name_str) => Ok(Name::parse(&name_str)),
+		None => Ok(None),
+	}
+}
 
 /// Application state. Can be expanded later with UI data.
 struct App<'a> {
@@ -28,24 +40,29 @@ struct PasswordStore<'a> {
 	items: Vec<Item<'a>>,
 }
 
+#[derive(Deserialize)]
 enum Item<'a> {
 	OnlineAccount(OnlineAccount<'a>),
 	SocialSecurity(SocialSecurity),
 }
 
+#[derive(Deserialize)]
 struct SocialSecurity {
 	account_number:   String,
+	#[serde(deserialize_with = "deserialize_name")]
 	legal_name:       Option<Name>,
 	issuance_date:    Option<Date>,
 	country_of_issue: Option<Country>,
 }
 
+#[derive(Deserialize)]
 enum AuthProvider {
 	Google,
 	Apple,
 	Facebook,
 }
 
+#[derive(Deserialize)]
 struct OnlineAccount<'a> {
 	account:            String,
 	username:           Option<String>,
@@ -54,19 +71,23 @@ struct OnlineAccount<'a> {
 	sign_in_with:       Option<Vec<AuthProvider>>,
 	password:           Option<String>,
 	status:             Option<AccountStatus>,
-	website:            Option<Url>,
+	host_website:       Option<Url>,
+	login_pages:        Option<Vec<Url>>,
 	security_questions: Option<Vec<SecurityQuestion>>,
 	date_created:       Option<Date>,
 	two_factor_enabled: Option<bool>,
+	#[serde(skip)]
 	associated_items:   Vec<&'a Item<'a>>,
 	notes:              Option<String>,
 }
 
+#[derive(Deserialize)]
 enum AccountStatus {
 	Active,
 	Deactivated,
 }
 
+#[derive(Deserialize)]
 struct SecurityQuestion {
 	question: String,
 	answer:   String,
@@ -376,7 +397,7 @@ impl<'a> App<'a> {
 							sign_in_with:       Some(vec![AuthProvider::Google, AuthProvider::Apple]),
 							password:           Some("correct-horse-battery-staple".into()),
 							status:             Some(AccountStatus::Active),
-							website:            Some("https://github.com".parse().unwrap()),
+							host_website:       Some("https://github.com".parse().unwrap()),
 							security_questions: Some(vec![
 								SecurityQuestion {
 									question: "What was your first pet's name?".into(),
@@ -393,6 +414,7 @@ impl<'a> App<'a> {
 							notes:              Some(
 								"Primary development account. Remember to rotate SSH keys quarterly.".into(),
 							),
+							login_pages:        Some(vec![]),
 						}),
 						Item::SocialSecurity(SocialSecurity {
 							account_number:   "123-45-6789".into(),
