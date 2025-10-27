@@ -21,19 +21,19 @@ use ratatui::{
 use url::Url;
 
 /// Application state. Can be expanded later with UI data.
-struct App {
+struct App<'a> {
     should_quit: bool,
-    store: PasswordStore,
+    store: PasswordStore<'a>,
     list_state: ListState,
 }
 
 #[derive(Default)]
-struct PasswordStore {
-    items: Vec<Item>,
+struct PasswordStore<'a> {
+    items: Vec<Item<'a>>,
 }
 
-enum Item {
-    OnlineAccount(OnlineAccount),
+enum Item<'a> {
+    OnlineAccount(OnlineAccount<'a>),
     SocialSecurity(SocialSecurity),
 }
 
@@ -50,7 +50,7 @@ enum AuthProvider {
     Facebook,
 }
 
-struct OnlineAccount {
+struct OnlineAccount<'a> {
     account: String,
     username: Option<String>,
     email: Option<EmailAddress>,
@@ -84,7 +84,7 @@ impl<'a> From<ItemList<'a>> for List<'a> {
             .0
             .iter()
             .map(|item| match item {
-                Item::Simple(Simple {
+                Item::OnlineAccount(OnlineAccount {
                     account, username, ..
                 }) => {
                     let line = Line::from(vec![
@@ -115,12 +115,12 @@ impl App {
             store: PasswordStore {
                 items: {
                     vec![
-                        Item::Simple(Simple {
+                        Item::OnlineAccount(OnlineAccount {
                             account: "GitHub".into(),
                             username: "alice".into(),
                             password: "secret".into(),
                         }),
-                        Item::Simple(Simple {
+                        Item::OnlineAccount(OnlineAccount {
                             account: "Reddit".into(),
                             username: "bob".into(),
                             password: "password".into(),
@@ -178,8 +178,11 @@ impl App {
         // Determine the item to render (Should always associate with item)
         let selected_item = self.store.items.get(selected_item_idx).unwrap();
 
+        let text = Text::raw("hi");
+
         // Pass a snapshot of the state at the time to render
-        frame.render_stateful_widget(list, area, &mut self.list_state.clone());
+        frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
+        frame.render_widget(text, area2);
     }
 
     /// Handle key input and update state.
