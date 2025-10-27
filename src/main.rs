@@ -499,7 +499,15 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 		let mut raw_item: OnlineAccount = toml::from_slice(&file_bytes)?;
 
 		// Derive the account, which is practically just the filename
-		let identification = entry.into_path().file_name().unwrap().to_string_lossy().into();
+		let identification = entry
+			.into_path()
+			.file_name()
+			.unwrap()
+			.to_string_lossy()
+			.split_once(".")
+			.unwrap()
+			.0
+			.to_string();
 
 		items.insert(identification, Item::OnlineAccount(raw_item));
 	}
