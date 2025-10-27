@@ -464,6 +464,10 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 	for entry in WalkDir::new(store_path) {
 		let entry = entry?;
 
+		if entry.clone().into_path().is_dir() {
+			continue;
+		}
+
 		let file_bytes: Vec<u8> = read(entry.clone().into_path())?;
 
 		// The item before deriving associated items and certain attributes using the
@@ -471,7 +475,7 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 		let mut raw_item: OnlineAccount = toml::from_slice(&file_bytes)?;
 
 		// Derive the account, which is practically just the filename
-		raw_item.account = entry.into_path().to_string_lossy().into();
+		let identification = entry.into_path().file_name().unwrap().to_string_lossy().into();
 
 		items.insert(identification, Item::OnlineAccount(raw_item));
 	}
