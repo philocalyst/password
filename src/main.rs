@@ -24,9 +24,9 @@ where
 }
 
 /// Application state. Can be expanded later with UI data.
-struct App<'a> {
+struct App {
 	should_quit: bool,
-	store:       PasswordStore<'a>,
+	store:       PasswordStore,
 	focused:     Components,
 	list_state:  ListState,
 }
@@ -37,17 +37,17 @@ enum Components {
 }
 
 #[derive(Default)]
-struct PasswordStore<'a> {
-	items: HashMap<String, Item<'a>>,
+struct PasswordStore {
+	items: HashMap<String, Item>,
 }
 
-#[derive(Deserialize)]
-enum Item<'a> {
-	OnlineAccount(OnlineAccount<'a>),
+#[derive(Deserialize, Clone)]
+enum Item {
+	OnlineAccount(OnlineAccount),
 	SocialSecurity(SocialSecurity),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct SocialSecurity {
 	account_number:   String,
 	#[serde(deserialize_with = "deserialize_name")]
@@ -56,57 +56,47 @@ struct SocialSecurity {
 	country_of_issue: Option<Country>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 enum AuthProvider {
 	Google,
 	Apple,
 	Facebook,
 }
 
-#[derive(Deserialize)]
-struct OnlineAccount<'a> {
+#[derive(Deserialize, Clone)]
+struct OnlineAccount {
 	#[serde(skip)]
-	account:               String,
-	username:              Option<String>,
-	email:                 Option<EmailAddress>,
-	phone:                 Option<PhoneNumber>,
-	sign_in_with:          Option<Vec<AuthProvider>>,
-	password:              Option<String>,
-	status:                Option<AccountStatus>,
-	host_website:          Option<Url>,
-	login_pages:           Option<Vec<Url>>,
-	security_questions:    Option<Vec<SecurityQuestion>>,
-	date_created:          Option<Date>,
-	two_factor_enabled:    Option<bool>,
-	#[serde(default, rename = "associated_items")]
-	associated_item_names: Vec<String>, // Temporarily store names
-	#[serde(skip)]
-	associated_items:      Vec<&'a Item<'a>>,
-	notes:                 Option<String>,
+	account:            String,
+	username:           Option<String>,
+	email:              Option<EmailAddress>,
+	phone:              Option<PhoneNumber>,
+	sign_in_with:       Option<Vec<AuthProvider>>,
+	password:           Option<String>,
+	status:             Option<AccountStatus>,
+	host_website:       Option<Url>,
+	login_pages:        Option<Vec<Url>>,
+	security_questions: Option<Vec<SecurityQuestion>>,
+	date_created:       Option<Date>,
+	two_factor_enabled: Option<bool>,
+	associated_items:   Vec<String>,
+	notes:              Option<String>,
 }
 
-impl<'a> OnlineAccount<'a> {
-	fn resolve_associations(&mut self, item_map: &'a HashMap<String, Item<'a>>) {
-		self.associated_items =
-			self.associated_item_names.iter().filter_map(|name| item_map.get(name.as_str())).collect();
-	}
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 enum AccountStatus {
 	Active,
 	Deactivated,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct SecurityQuestion {
 	question: String,
 	answer:   String,
 }
 
 #[derive(Clone)]
-struct ItemList<'a>(&'a HashMap<String, Item<'a>>);
-struct ItemDetailView<'a>(&'a Item<'a>);
+struct ItemList<'a>(&'a HashMap<String, Item>);
+struct ItemDetailView<'a>(&'a Item);
 
 impl<'a> ItemDetailView<'a> {
 	fn render(&self, frame: &mut Frame, area: Rect) {
@@ -360,7 +350,7 @@ impl<'a> ItemDetailView<'a> {
 
 impl<'a> From<ItemList<'a>> for List<'a> {
 	fn from(items: ItemList<'a>) -> Self {
-		let mut sorted_items: Vec<(&String, &Item<'a>)> = items.0.iter().collect();
+		let mut sorted_items: Vec<(&String, &Item)> = items.0.iter().collect();
 		sorted_items.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
 
 		let list_items: Vec<ListItem<'a>> = sorted_items
@@ -381,21 +371,21 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 
 impl<'a> ItemList<'a> {
 	/// Get an item by its index in the alphabetically sorted list
-	pub fn get_by_index(&self, index: usize) -> Option<(&String, &Item<'a>)> {
-		let mut sorted_items: Vec<(&String, &Item<'a>)> = self.0.iter().collect();
+	pub fn get_by_index(&self, index: usize) -> Option<(&String, &Item)> {
+		let mut sorted_items: Vec<(&String, &Item)> = self.0.iter().collect();
 		sorted_items.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
 		sorted_items.get(index).copied()
 	}
 }
 
-impl<'a> App<'a> {
+impl App {
 	/// Create a new instance with default values.
 	fn new() -> Self {
 		// Define the default selected item (the first)
 		let mut list = ListState::default();
 		list.select(Some(0usize));
 
-		let store = load_from_store(PathBuf::from("../store")).unwrap();
+		let store = load_from_store(PathBuf::from("./store")).unwrap();
 
 		Self { should_quit: false, focused: Components::List, store, list_state: list }
 	}
@@ -480,10 +470,10 @@ impl<'a> App<'a> {
 	}
 }
 
-fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
+fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore> {
 	use walkdir;
 
-	let mut items: HashMap<String, Item<'a>> = HashMap::default();
+	let mut items: HashMap<String, Item> = HashMap::default();
 
 	for entry in WalkDir::new(store_path) {
 		let entry = entry?;
@@ -535,7 +525,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> 
 	let mut stdout = io::stdout();
 
 	// Enter the alternative screen for transparent resets
-	execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 	terminal.clear()?;
 
 	let mut app = App::new();
@@ -543,7 +532,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> 
 
 	// Cleanup always restore terminal state before exiting, even on errors
 	disable_raw_mode().ok();
-	execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
 
 	Ok(())
 }
