@@ -52,15 +52,23 @@ enum AuthProvider {
 
 struct OnlineAccount {
     account: String,
-    username: String,
-    email: EmailAddress,
-    phone: PhoneNumber,
-    sign_in_with: AuthProvider,
-    password: String,
-    website: Url,
-    security_questions: Vec<SecurityQuestion>,
-    date_created: Date,
-    notes: String,
+    username: Option<String>,
+    email: Option<EmailAddress>,
+    phone: Option<PhoneNumber>,
+    sign_in_with: Option<Vec<AuthProvider>>,
+    password: Option<String>,
+    status: Option<AccountStatus>,
+    website: Option<Url>,
+    security_questions: Option<Vec<SecurityQuestion>>,
+    date_created: Option<Date>,
+    two_factor_enabled: Option<bool>,
+    associated_items: Vec<&'a Item>,
+    notes: Option<String>,
+}
+
+enum AccountStatus {
+    Active,
+    Deactivated,
 }
 
 struct SecurityQuestion {
