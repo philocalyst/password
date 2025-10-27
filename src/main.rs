@@ -1,4 +1,4 @@
-use std::{io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
+use std::{fs::read, io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
@@ -65,6 +65,7 @@ enum AuthProvider {
 
 #[derive(Deserialize)]
 struct OnlineAccount<'a> {
+	#[serde(skip)]
 	account:            String,
 	username:           Option<String>,
 	email:              Option<EmailAddress>,
@@ -508,29 +509,27 @@ impl<'a> App<'a> {
 	}
 }
 
-struct Store(Vec<PathBuf>);
-
-impl<'de> DeserializeSeed<'de> for Store {
-	type Value = Item<'de>;
-
-	fn deserialize<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
-	where
-		D: serde::Deserializer<'de>,
-	{
-		todo!()
-	}
-}
-
-fn load_from_store<'a>(store_path: PathBuf) -> Vec<Item<'a>> {
+fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore<'a>> {
 	use walkdir;
 
-	let available_items: Vec<PathBuf> = WalkDir::new(store_path)
-		.follow_links(true)
-		.into_iter()
-		.map(|path| path.unwrap().into_path())
-		.collect();
+	let mut items: Vec<Item<'a>> = vec![];
 
-	vec![]
+	for entry in WalkDir::new(store_path) {
+		let entry = entry?;
+
+		let file_bytes: Vec<u8> = read(entry.clone().into_path())?;
+
+		// The item before deriving associated items and certain attributes using the
+		// filename
+		let mut raw_item: OnlineAccount = toml::from_slice(&file_bytes)?;
+
+		// Derive the account, which is practically just the filename
+		raw_item.account = entry.into_path().to_string_lossy().into();
+
+		items.push(Item::OnlineAccount(raw_item));
+	}
+
+	Ok(PasswordStore { items })
 }
 
 /// Entry point: initializes terminal and runs the app safely.
