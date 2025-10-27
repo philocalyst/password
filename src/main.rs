@@ -47,10 +47,11 @@ where
 
 /// Application state. Can be expanded later with UI data.
 struct App {
-	should_quit: bool,
-	store:       PasswordStore,
-	focused:     Components,
-	list_state:  ListState,
+	should_quit:          bool,
+	store:                PasswordStore,
+	focused:              Components,
+	list_state:           ListState,
+	detail_focused_field: Option<FocusableField>,
 }
 
 enum Components {
@@ -804,7 +805,13 @@ impl App {
 
 		let store = load_from_store(PathBuf::from("./store")).unwrap();
 
-		Self { should_quit: false, focused: Components::List, store, list_state: list }
+		Self {
+			should_quit: false,
+			focused: Components::List,
+			store,
+			list_state: list,
+			detail_focused_field: None, // Initialize as None
+		}
 	}
 
 	/// Run the main event loop until `should_quit` becomes true.
