@@ -1,4 +1,4 @@
-use std::{io::{self, stdout}, time::{Duration, Instant}};
+use std::{io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
@@ -8,8 +8,9 @@ use human_name::Name;
 use jiff::civil::Date;
 use phonenumber::PhoneNumber;
 use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeSeed};
 use url::Url;
+use walkdir::WalkDir;
 
 fn deserialize_name<'de, D>(deserializer: D) -> Result<Option<Name>, D::Error>
 where
@@ -518,6 +519,18 @@ impl<'de> DeserializeSeed<'de> for Store {
 	{
 		todo!()
 	}
+}
+
+fn load_from_store<'a>(store_path: PathBuf) -> Vec<Item<'a>> {
+	use walkdir;
+
+	let available_items: Vec<PathBuf> = WalkDir::new(store_path)
+		.follow_links(true)
+		.into_iter()
+		.map(|path| path.unwrap().into_path())
+		.collect();
+
+	vec![]
 }
 
 /// Entry point: initializes terminal and runs the app safely.
