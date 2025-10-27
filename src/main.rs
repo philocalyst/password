@@ -350,12 +350,16 @@ impl<'a> ItemDetailView<'a> {
 
 impl<'a> From<ItemList<'a>> for List<'a> {
 	fn from(items: ItemList<'a>) -> Self {
-		let list_items: Vec<ListItem<'a>> = items
-			.0
+		let mut sorted_items: Vec<(&String, &Item<'a>)> = items.0.iter().collect();
+		sorted_items.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
+
+		let list_items: Vec<ListItem<'a>> = sorted_items
 			.iter()
 			.map(|(name, _)| {
-				let line =
-					Line::from(vec![Span::styled(name, Style::default().fg(Color::Green)), Span::raw(" | ")]);
+				let line = Line::from(vec![
+					Span::styled(name.to_string(), Style::default().fg(Color::Green)),
+					Span::raw(" | "),
+				]);
 				ListItem::new(line)
 			})
 			.collect();
@@ -363,6 +367,15 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 		List::new(list_items)
 			.highlight_symbol("> ")
 			.highlight_style(Style::default().add_modifier(Modifier::BOLD))
+	}
+}
+
+impl<'a> ItemList<'a> {
+	/// Get an item by its index in the alphabetically sorted list
+	pub fn get_by_index(&self, index: usize) -> Option<(&String, &Item<'a>)> {
+		let mut sorted_items: Vec<(&String, &Item<'a>)> = self.0.iter().collect();
+		sorted_items.sort_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b));
+		sorted_items.get(index).copied()
 	}
 }
 
