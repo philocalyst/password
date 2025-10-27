@@ -500,14 +500,13 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> 
 
 	// Enter the alternative screen for transparent resets
 	execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+	terminal.clear()?;
 
 	let mut app = App::new();
 	app.run(terminal).context("application run failed")?;
 
 	// Cleanup always restore terminal state before exiting, even on errors
 	disable_raw_mode().ok();
-	terminal.show_cursor().ok();
-
 	execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
 
 	Ok(())
