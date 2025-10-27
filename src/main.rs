@@ -39,9 +39,9 @@ enum Item<'a> {
 
 struct SocialSecurity {
     account_number: String,
-    legal_name: Name,
-    issuance_date: Date,
-    country_of_issue: Country,
+    legal_name: Option<Name>,
+    issuance_date: Option<Date>,
+    country_of_issue: Option<Country>,
 }
 
 enum AuthProvider {
@@ -62,7 +62,7 @@ struct OnlineAccount<'a> {
     security_questions: Option<Vec<SecurityQuestion>>,
     date_created: Option<Date>,
     two_factor_enabled: Option<bool>,
-    associated_items: Vec<&'a Item>,
+    associated_items: Vec<&'a Item<'a>>,
     notes: Option<String>,
 }
 
@@ -76,7 +76,8 @@ struct SecurityQuestion {
     answer: String,
 }
 
-struct ItemList<'a>(&'a [Item]);
+struct ItemList<'a>(&'a [Item<'a>]);
+struct ItemDetailView<'a>(&'a Item<'a>);
 
 impl<'a> From<ItemList<'a>> for List<'a> {
     fn from(items: ItemList<'a>) -> Self {
