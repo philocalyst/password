@@ -1,8 +1,8 @@
-use std::{io, time::{Duration, Instant}};
+use std::{io::{self, stdout}, time::{Duration, Instant}};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
-use crossterm::{event::{self, Event, KeyCode}, terminal::{disable_raw_mode, enable_raw_mode}};
+use crossterm::{event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use email_address::EmailAddress;
 use human_name::Name;
 use jiff::civil::Date;
@@ -14,7 +14,13 @@ use url::Url;
 struct App<'a> {
 	should_quit: bool,
 	store:       PasswordStore<'a>,
+	focused:     Components,
 	list_state:  ListState,
+}
+
+enum Components {
+	List,
+	Content,
 }
 
 #[derive(Default)]
@@ -358,6 +364,7 @@ impl<'a> App<'a> {
 
 		Self {
 			should_quit: false,
+			focused:     Components::List,
 			store:       PasswordStore {
 				items: {
 					vec![
@@ -451,8 +458,8 @@ impl<'a> App<'a> {
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
 		match key_event.code {
 			KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-			KeyCode::Down => self.cycle_forward(),
-			KeyCode::Up => self.cycle_backward(),
+			KeyCode::Down | KeyCode::Char('j') => self.cycle_forward(),
+			KeyCode::Up | KeyCode::Char('k') => self.cycle_backward(),
 			_ => {}
 		}
 	}
@@ -484,23 +491,30 @@ fn main() -> Result<()> {
 
 	enable_raw_mode().context("failed to enable raw mode")?;
 	let stdout = io::stdout();
+
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
 
 	let res = run_app(&mut terminal);
-
-	// Always restore terminal state before exiting, even on errors
-	disable_raw_mode().ok();
-	terminal.show_cursor().ok();
 
 	res
 }
 
 /// Create and run the app with proper error bubbling.
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-	// Clear any existing content on the screen
-	terminal.clear().context("failed to clear terminal")?;
+	let mut stdout = io::stdout();
+
+	// Enter the alternative screen for transparent resets
+	execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
 	let mut app = App::new();
-	app.run(terminal).context("application run failed")
+	app.run(terminal).context("application run failed")?;
+
+	// Cleanup always restore terminal state before exiting, even on errors
+	disable_raw_mode().ok();
+	terminal.show_cursor().ok();
+
+	execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
+
+	Ok(())
 }
