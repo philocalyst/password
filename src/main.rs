@@ -162,7 +162,7 @@ impl<'a> ItemDetailView<'a> {
 			]));
 		}
 
-		if let Some(website) = &account.website {
+		if let Some(website) = &account.host_website {
 			cred_lines.push(Line::from(""));
 			cred_lines.push(Line::from(vec![
 				Span::styled("🌐 ", Style::default().fg(Color::Blue)),
@@ -504,6 +504,19 @@ impl<'a> App<'a> {
 		} else {
 			self.list_state.select_previous();
 		}
+	}
+}
+
+struct Store(Vec<PathBuf>);
+
+impl<'de> DeserializeSeed<'de> for Store {
+	type Value = Item<'de>;
+
+	fn deserialize<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		todo!()
 	}
 }
 
