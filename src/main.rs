@@ -152,6 +152,19 @@ impl<'a> ItemDetailView<'a> {
 		}
 	}
 
+	fn has_security_fields(&self) -> bool {
+		match self.item {
+			Item::OnlineAccount(online_account) => {
+				if online_account.security_questions.is_some() {
+					return true;
+				} else {
+					return false;
+				}
+			}
+			Item::SocialSecurity(social_security) => todo!(),
+		}
+	}
+
 	// Call this to move focus to next field
 	fn focus_next(&mut self) {
 		let fields = self.get_available_fields();
@@ -278,11 +291,15 @@ impl<'a> ItemDetailView<'a> {
 		);
 		frame.render_widget(header, chunks[0]);
 
-		// Main content - two columns
-		let content_chunks = Layout::default()
-			.direction(Direction::Horizontal)
-			.constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-			.split(chunks[1]);
+		// Main content - two columns (if there are security configurations)
+
+		let contraints = match self.has_security_fields() {
+			true => [Constraint::Percentage(50), Constraint::Percentage(50)],
+			false => [Constraint::Percentage(100), Constraint::Percentage(0)],
+		};
+
+		let content_chunks =
+			Layout::default().direction(Direction::Horizontal).constraints(contraints).split(chunks[1]);
 
 		// Left column - render fields vertically
 		self.render_left_column(frame, content_chunks[0], account);
