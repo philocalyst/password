@@ -432,7 +432,13 @@ impl<'a> From<ItemList<'a>> for List<'a> {
                     ]);
                     ListItem::new(line)
                 }
-                Item::SocialSecurity(social_security) => todo!(),
+                Item::SocialSecurity(social_security) => {
+                    let line = Line::from(vec![
+                        Span::styled("hi", Style::default().fg(Color::Green)),
+                        Span::raw(" | "),
+                    ]);
+                    ListItem::new(line)
+                }
             })
             .collect();
 
@@ -447,7 +453,7 @@ impl<'a> App<'a> {
     fn new() -> Self {
         // Define the default selected item (the first)
         let mut list = ListState::default();
-        list.select(Some(0usize));
+        list.select(Some(1usize));
 
         Self {
             should_quit: false,
@@ -479,7 +485,13 @@ impl<'a> App<'a> {
                             "Primary development account. Remember to rotate SSH keys quarterly."
                                 .into(),
                         ),
-                    })]
+                    }),
+                    Item::SocialSecurity(SocialSecurity {
+        account_number: "123-45-6789".into(),
+        legal_name: Some(Name::parse("Alice Marie Johnson").unwrap()),
+        issuance_date: Some("1995-06-12".parse().unwrap()),
+        country_of_issue: Some("United States".parse().unwrap()),
+    }),]
                 },
             },
             list_state: list,
