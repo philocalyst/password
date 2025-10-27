@@ -3,15 +3,22 @@ use std::{
     time::{Duration, Instant},
 };
 
+use celes::Country;
 use color_eyre::eyre::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
+use email_address::EmailAddress;
+use human_name::Name;
+use jiff::civil::Date;
+use phonenumber::PhoneNumber;
 use ratatui::{
+    layout::Rect,
     prelude::*,
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
+use url::Url;
 
 /// Application state. Can be expanded later with UI data.
 struct App {
@@ -26,13 +33,39 @@ struct PasswordStore {
 }
 
 enum Item {
-    Simple(Simple),
+    OnlineAccount(OnlineAccount),
+    SocialSecurity(SocialSecurity),
 }
 
-struct Simple {
+struct SocialSecurity {
+    account_number: String,
+    legal_name: Name,
+    issuance_date: Date,
+    country_of_issue: Country,
+}
+
+enum AuthProvider {
+    Google,
+    Apple,
+    Facebook,
+}
+
+struct OnlineAccount {
     account: String,
     username: String,
+    email: EmailAddress,
+    phone: PhoneNumber,
+    sign_in_with: AuthProvider,
     password: String,
+    website: Url,
+    security_questions: Vec<SecurityQuestion>,
+    date_created: Date,
+    notes: String,
+}
+
+struct SecurityQuestion {
+    question: String,
+    answer: String,
 }
 
 struct ItemList<'a>(&'a [Item]);
