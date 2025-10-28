@@ -273,25 +273,9 @@ impl<'a> ItemDetailView<'a> {
 		let chunks = Layout::default()
 			.direction(Direction::Vertical)
 			.constraints([
-				Constraint::Length(3), // Header
-				Constraint::Min(10),   // Main content
+				Constraint::Min(10), // Main content
 			])
 			.split(area);
-
-		// Header with account name
-		let header = Paragraph::new(Line::from(vec![
-			Span::styled("GITHUB", Style::default().fg(Color::Yellow)),
-			Span::styled(&account.account, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-		]))
-		.block(
-			Block::default()
-				.borders(Borders::ALL)
-				.border_style(Style::default().fg(Color::Cyan))
-				.title(" Online Account ")
-				.title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-		);
-
-		frame.render_widget(header, chunks[0]);
 
 		// Main content - two columns (if there are security configurations)
 
@@ -301,7 +285,7 @@ impl<'a> ItemDetailView<'a> {
 		};
 
 		let content_chunks =
-			Layout::default().direction(Direction::Horizontal).constraints(contraints).split(chunks[1]);
+			Layout::default().direction(Direction::Horizontal).constraints(contraints).split(chunks[0]);
 
 		// Left column - render fields vertically
 		self.render_left_column(frame, content_chunks[0], account);
