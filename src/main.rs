@@ -280,17 +280,36 @@ impl<'a> ItemDetailView<'a> {
 
 		// Header with account name
 		let header = Paragraph::new(Line::from(vec![
-			Span::styled("🔐 ", Style::default().fg(Color::Yellow)),
+			Span::styled("GITHUB", Style::default().fg(Color::Yellow)),
 			Span::styled(&account.account, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
 		]))
 		.block(
 			Block::default()
 				.borders(Borders::ALL)
+				.border_set(REGULAR_SET)
 				.border_style(Style::default().fg(Color::Cyan))
 				.title(" Online Account ")
-				.title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-		);
+				.title_style(
+					Style::default().fg(Color::Yellow).bg(Color::Magenta).add_modifier(Modifier::BOLD),
+				),
+		)
+		.bg(Color::LightBlue);
 		frame.render_widget(header, chunks[0]);
+
+		// fixing the bg
+		let border_south = chunks[0].rows().last().unwrap_or_default();
+		for xy in border_south.positions() {
+			if let Some(c) = frame.buffer_mut().cell_mut(xy) {
+				let style = c.style();
+				c.set_style(style.bg(Color::Black));
+			}
+		}
+
+		let top_left = chunks[0].as_position();
+		if let Some(c) = frame.buffer_mut().cell_mut(top_left) {
+			let style = c.style();
+			c.set_style(style.bg(Color::Black));
+		}
 
 		// Main content - two columns (if there are security configurations)
 
@@ -903,9 +922,56 @@ impl App {
 
 		let mut clipboard = arboard::Clipboard::new()?;
 
-		clipboard.set_text("OH")?;
+		clipboard.set_text(self.get_focused_field_value().unwrap())?;
 
 		Ok(())
+	}
+
+	fn get_focused_field_value(&self) -> Option<String> {
+		let item = self.get_current_item();
+		let focused = self.detail_focused_field?;
+
+		match item {
+			Item::OnlineAccount(account) => match focused {
+				FocusableField::Username => account.username.clone(),
+				FocusableField::Email => account.email.as_ref().map(|e| e.to_string()),
+				FocusableField::Phone => account.phone.as_ref().map(|p| p.to_string()),
+				FocusableField::Password => account.password.clone(),
+				FocusableField::Website => account.host_website.as_ref().map(|w| w.to_string()),
+				FocusableField::Status => account.status.as_ref().map(|s| match s {
+					AccountStatus::Active => "Active".to_string(),
+					AccountStatus::Deactivated => "Deactivated".to_string(),
+				}),
+				FocusableField::TwoFactor => account.two_factor_enabled.map(|enabled| enabled.to_string()),
+				FocusableField::SignInProviders => account.sign_in_with.as_ref().map(|providers| {
+					providers
+						.iter()
+						.map(|p| match p {
+							AuthProvider::Google => "Google",
+							AuthProvider::Apple => "Apple",
+							AuthProvider::Facebook => "Facebook",
+						})
+						.collect::<Vec<_>>()
+						.join(", ")
+				}),
+				FocusableField::DateCreated => account.date_created.as_ref().map(|d| d.to_string()),
+				FocusableField::SecurityQuestions => account.security_questions.as_ref().map(|qs| {
+					qs.iter()
+						.map(|q| format!("Q: {} A: {}", q.question, q.answer))
+						.collect::<Vec<_>>()
+						.join("\n")
+				}),
+				FocusableField::Notes => account.notes.clone(),
+				_ => None,
+			},
+			Item::SocialSecurity(ssn) => match focused {
+				FocusableField::AccountNumber => Some(ssn.account_number.clone()),
+				FocusableField::LegalName => ssn.legal_name.as_ref().map(|n| n.display_full().to_string()),
+				FocusableField::Country => ssn.country_of_issue.as_ref().map(|c| c.to_string()),
+				FocusableField::IssuanceDate => ssn.issuance_date.as_ref().map(|d| d.to_string()),
+				_ => None,
+			},
+		}
 	}
 
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
@@ -915,7 +981,7 @@ impl App {
 					KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
 					KeyCode::Down | KeyCode::Char('j') => self.cycle_forward(),
 					KeyCode::Up | KeyCode::Char('k') => self.cycle_backward(),
-					KeyCode::Enter | KeyCode::Right => {
+					KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
 						self.focused = Components::Content;
 						// Initialize with first field
 						self.detail_focused_field = self.get_first_field_for_current_item();
@@ -924,11 +990,13 @@ impl App {
 				}
 			}
 			Components::Content => match key_event.code {
-				KeyCode::Char('q') | KeyCode::Esc | KeyCode::Left => {
+				KeyCode::Char('q') => self.should_quit = true,
+				KeyCode::Esc | KeyCode::Left | KeyCode::Char('h') => {
 					self.focused = Components::List;
 					self.detail_focused_field = None;
 				}
 				KeyCode::Down | KeyCode::Char('j') => self.focus_next_field(),
+				KeyCode::Char(' ') => self.copy_field().unwrap(),
 				KeyCode::Up | KeyCode::Char('k') => self.focus_prev_field(),
 				_ => {}
 			},
