@@ -286,30 +286,12 @@ impl<'a> ItemDetailView<'a> {
 		.block(
 			Block::default()
 				.borders(Borders::ALL)
-				.border_set(REGULAR_SET)
 				.border_style(Style::default().fg(Color::Cyan))
 				.title(" Online Account ")
-				.title_style(
-					Style::default().fg(Color::Yellow).bg(Color::Magenta).add_modifier(Modifier::BOLD),
-				),
-		)
-		.bg(Color::LightBlue);
+				.title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+		);
+
 		frame.render_widget(header, chunks[0]);
-
-		// fixing the bg
-		let border_south = chunks[0].rows().last().unwrap_or_default();
-		for xy in border_south.positions() {
-			if let Some(c) = frame.buffer_mut().cell_mut(xy) {
-				let style = c.style();
-				c.set_style(style.bg(Color::Black));
-			}
-		}
-
-		let top_left = chunks[0].as_position();
-		if let Some(c) = frame.buffer_mut().cell_mut(top_left) {
-			let style = c.style();
-			c.set_style(style.bg(Color::Black));
-		}
 
 		// Main content - two columns (if there are security configurations)
 
