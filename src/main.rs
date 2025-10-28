@@ -507,7 +507,7 @@ impl<'a> ItemDetailView<'a> {
 
 		// Status
 		if let Some(status) = &account.status {
-			let (label_style, _) = self.get_field_style(FocusableField::Status, Color::Magenta);
+			let (label_style, _) = self.get_field_style(FocusableField::Status, Color::Gray);
 			let border_style = if self.is_focused(FocusableField::Status) {
 				Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
 			} else {
@@ -775,19 +775,17 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 		let list_items: Vec<ListItem<'a>> = sorted_items
 			.iter()
 			.map(|(name, _)| {
-				let line = Line::from(vec![
-					Span::styled(name.to_string(), Style::default().fg(Color::Green)),
-					Span::raw(" | "),
-				]);
+				let line =
+					Line::from(vec![Span::styled(name.to_string(), Style::default().fg(Color::Gray))]);
 				ListItem::new(line)
 			})
 			.collect();
 
-		let block = Block::new().borders(Borders::ALL).border_set(REGULAR_SET).bg(Color::Magenta);
+		let block = Block::new().borders(Borders::ALL).border_set(REGULAR_SET).bg(Color::DarkGray);
 
 		List::new(list_items)
 			.block(block)
-			.highlight_symbol("> ")
+			.highlight_symbol("!")
 			.highlight_style(Style::default().add_modifier(Modifier::BOLD))
 	}
 }
