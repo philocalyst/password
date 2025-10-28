@@ -459,15 +459,15 @@ impl<'a> ItemDetailView<'a> {
 			let title_style = if self.is_focused(FocusableField::Notes) {
 				Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)
 			} else {
-				Style::default().fg(Color::Yellow)
+				Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
 			};
 
 			let widget = Paragraph::new(notes.as_str())
 				.block(
 					Block::default()
+						.title("NOTES")
 						.borders(Borders::ALL)
 						.border_style(border_style)
-						.title("ℕ𝕠𝕥𝕖𝕤")
 						.border_set(WONKY_SET)
 						.title_style(title_style),
 				)
