@@ -13,7 +13,7 @@ use url::Url;
 use walkdir::WalkDir;
 
 const REGULAR_SET: Set = Set {
-	top_left:          "▟",
+	top_left:          "▛",
 	top_right:         "▜",
 	bottom_left:       "▔",
 	bottom_right:      "▔",
@@ -782,7 +782,11 @@ impl<'a> From<ItemList<'a>> for List<'a> {
 				ListItem::new(line)
 			})
 			.collect();
+
+		let block = Block::new().borders(Borders::ALL).border_set(REGULAR_SET).bg(Color::Magenta);
+
 		List::new(list_items)
+			.block(block)
 			.highlight_symbol("> ")
 			.highlight_style(Style::default().add_modifier(Modifier::BOLD))
 	}
@@ -895,6 +899,16 @@ impl App {
 
 		// Pass a snapshot of the state at the time to render
 		frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
+
+		// fixing the bg
+		let border_south = area1.rows().last().unwrap_or_default();
+		for xy in border_south.positions() {
+			if let Some(c) = frame.buffer_mut().cell_mut(xy) {
+				let style = c.style();
+				c.set_style(style.bg(Color::Black));
+			}
+		}
+
 		ItemDetailView { item: selected_item, focused_field: self.detail_focused_field }
 			.render(frame, area2);
 	}
