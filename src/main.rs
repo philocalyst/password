@@ -12,27 +12,9 @@ use serde::{Deserialize, de::DeserializeSeed};
 use url::Url;
 use walkdir::WalkDir;
 
-const REGULAR_SET: Set = Set {
-	top_left:          "▛",
-	top_right:         "▜",
-	bottom_left:       "▔",
-	bottom_right:      "▔",
-	vertical_left:     "▏",
-	vertical_right:    "▕",
-	horizontal_top:    "▔",
-	horizontal_bottom: "▔",
-};
+use crate::ui::{REGULAR_SET, WONKY_SET};
 
-const WONKY_SET: Set = Set {
-	top_left:          "╭",
-	top_right:         "╮",
-	bottom_left:       "▔",
-	bottom_right:      "▔",
-	vertical_left:     "║",
-	vertical_right:    "║",
-	horizontal_top:    "═",
-	horizontal_bottom: "▔",
-};
+mod ui;
 
 fn deserialize_name<'de, D>(deserializer: D) -> Result<Option<Name>, D::Error>
 where
