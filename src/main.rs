@@ -1,13 +1,13 @@
-use std::{collections::HashMap, fs::read, io::{self, stdout}, path::PathBuf, time::{Duration, Instant}};
+use std::{collections::HashMap, fs::read, io::{self}, path::PathBuf, time::Duration};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
-use crossterm::{event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
+use crossterm::{event::{self, Event, KeyCode}, terminal::{disable_raw_mode, enable_raw_mode}};
 use email_address::EmailAddress;
 use human_name::Name;
 use jiff::civil::Date;
 use phonenumber::PhoneNumber;
-use ratatui::{layout::Rect, prelude::*, symbols::border::Set, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
+use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
 use serde::{Deserialize, de::DeserializeSeed};
 use url::Url;
 use walkdir::WalkDir;
@@ -138,13 +138,9 @@ impl<'a> ItemDetailView<'a> {
 	fn has_security_fields(&self) -> bool {
 		match self.item {
 			Item::OnlineAccount(online_account) => {
-				if online_account.security_questions.is_some() {
-					return true;
-				} else {
-					return false;
-				}
+				online_account.security_questions.is_some()
 			}
-			Item::SocialSecurity(social_security) => todo!(),
+			Item::SocialSecurity(_social_security) => todo!(),
 		}
 	}
 
@@ -205,7 +201,7 @@ impl<'a> ItemDetailView<'a> {
 				if account.two_factor_enabled.is_some() {
 					fields.push(FocusableField::TwoFactor);
 				}
-				if account.sign_in_with.as_ref().map_or(false, |p| !p.is_empty()) {
+				if account.sign_in_with.as_ref().is_some_and(|p| !p.is_empty()) {
 					fields.push(FocusableField::SignInProviders);
 				}
 				if account.date_created.is_some() {
@@ -313,7 +309,7 @@ impl<'a> ItemDetailView<'a> {
 
 		// Username
 		if let Some(username) = &account.username {
-			let (label_style, value_style) = self.get_field_style(FocusableField::Username, Color::Green);
+			let (_label_style, value_style) = self.get_field_style(FocusableField::Username, Color::Green);
 			let border_style = if self.is_focused(FocusableField::Username) {
 				Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
 			} else {
@@ -370,7 +366,7 @@ impl<'a> ItemDetailView<'a> {
 
 		// Password - shows actual password when focused!
 		if let Some(password) = &account.password {
-			let (label_style, value_style) = self.get_field_style(FocusableField::Password, Color::Red);
+			let (_label_style, value_style) = self.get_field_style(FocusableField::Password, Color::Red);
 			let border_style = if self.is_focused(FocusableField::Password) {
 				Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
 			} else {
@@ -391,7 +387,7 @@ impl<'a> ItemDetailView<'a> {
 
 		// Website
 		if let Some(website) = &account.host_website {
-			let (label_style, value_style) = self.get_field_style(FocusableField::Website, Color::Blue);
+			let (_label_style, _value_style) = self.get_field_style(FocusableField::Website, Color::Blue);
 			let border_style = if self.is_focused(FocusableField::Website) {
 				Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
 			} else {
@@ -452,7 +448,7 @@ impl<'a> ItemDetailView<'a> {
 		if account.two_factor_enabled.is_some() {
 			constraints.push(Constraint::Length(3));
 		}
-		if account.sign_in_with.as_ref().map_or(false, |p| !p.is_empty()) {
+		if account.sign_in_with.as_ref().is_some_and(|p| !p.is_empty()) {
 			let provider_count = account.sign_in_with.as_ref().map_or(0, |p| p.len());
 			constraints.push(Constraint::Length(2 + provider_count as u16));
 		}
@@ -528,8 +524,8 @@ impl<'a> ItemDetailView<'a> {
 		}
 
 		// Sign in providers
-		if let Some(providers) = &account.sign_in_with {
-			if !providers.is_empty() {
+		if let Some(providers) = &account.sign_in_with
+			&& !providers.is_empty() {
 				let border_style = if self.is_focused(FocusableField::SignInProviders) {
 					Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
 				} else {
@@ -566,7 +562,6 @@ impl<'a> ItemDetailView<'a> {
 				frame.render_widget(widget, chunks[chunk_idx]);
 				chunk_idx += 1;
 			}
-		}
 
 		// Date created
 		if let Some(date) = &account.date_created {
@@ -825,13 +820,12 @@ impl App {
 			terminal.draw(|f| self.render(f)).context("failed to draw frame")?;
 
 			// Handle input with timeout
-			if event::poll(TICK_RATE).context("failed to poll events")? {
-				if let Event::Key(key_event) =
+			if event::poll(TICK_RATE).context("failed to poll events")?
+				&& let Event::Key(key_event) =
 					event::read().context("failed to read event from terminal")?
 				{
 					self.handle_key(key_event);
 				}
-			}
 		}
 
 		Ok(())
@@ -849,7 +843,7 @@ impl App {
 		};
 
 		// A simple frame for our display
-		let block = Block::default().title("Ratatui Example").borders(Borders::ALL);
+		let _block = Block::default().title("Ratatui Example").borders(Borders::ALL);
 
 		let item_list = ItemList(&self.store.items);
 
@@ -865,7 +859,7 @@ impl App {
 		frame.render_stateful_widget(list, area1, &mut self.list_state.clone());
 
 		// fixing the bg
-		let border_south = area1.rows().last().unwrap_or_default();
+		let border_south = area1.rows().next_back().unwrap_or_default();
 		for xy in border_south.positions() {
 			if let Some(c) = frame.buffer_mut().cell_mut(xy) {
 				let style = c.style();
@@ -985,7 +979,7 @@ impl App {
 }
 
 fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore> {
-	use walkdir;
+	
 
 	let mut items: HashMap<String, Item> = HashMap::default();
 
@@ -1000,7 +994,7 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore> {
 
 		// The item before deriving associated items and certain attributes using the
 		// filename
-		let mut raw_item: OnlineAccount = toml::from_slice(&file_bytes)?;
+		let raw_item: OnlineAccount = toml::from_slice(&file_bytes)?;
 
 		// Derive the account, which is practically just the filename
 		let identification = entry
@@ -1029,14 +1023,14 @@ fn main() -> Result<()> {
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
 
-	let res = run_app(&mut terminal);
+	
 
-	res
+	run_app(&mut terminal)
 }
 
 /// Create and run the app with proper error bubbling.
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-	let mut stdout = io::stdout();
+	let _stdout = io::stdout();
 
 	// Enter the alternative screen for transparent resets
 	terminal.clear()?;
