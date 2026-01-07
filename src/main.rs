@@ -11,6 +11,8 @@ use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem
 use serde::{Deserialize, de::DeserializeSeed};
 use url::Url;
 use walkdir::WalkDir;
+use iroh::{protocol::Router, Endpoint};
+use iroh_blobs::{store::mem::MemStore, ticket::BlobTicket, BlobsProtocol};
 
 use crate::ui::{REGULAR_SET, WONKY_SET};
 
@@ -1014,7 +1016,8 @@ fn load_from_store<'a>(store_path: PathBuf) -> Result<PasswordStore> {
 }
 
 /// Entry point: initializes terminal and runs the app safely.
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
 	color_eyre::install()?;
 
 	enable_raw_mode().context("failed to enable raw mode")?;
@@ -1023,7 +1026,9 @@ fn main() -> Result<()> {
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
 
-	
+	let endpoint = Endpoint::bind().await?;
+	let store = MemStore::new();
+	let blobs = BlobsProtocol::new(&store, None);
 
 	run_app(&mut terminal)
 }
