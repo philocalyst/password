@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::read, io::{self}, path::PathBuf, time::Duration};
+use std::{collections::HashMap, fs::{read, write}, io::{self}, path::PathBuf, time::Duration};
 
 use celes::Country;
 use color_eyre::eyre::{Context, Result};
@@ -7,15 +7,16 @@ use email_address::EmailAddress;
 use human_name::Name;
 use jiff::civil::Date;
 use phonenumber::PhoneNumber;
-use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}};
-use serde::{Deserialize, de::DeserializeSeed};
+use ratatui::{layout::Rect, prelude::*, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap, Clear}};
+use serde::{Deserialize, Serialize};
 use url::Url;
 use walkdir::WalkDir;
-use iroh::{protocol::Router, Endpoint};
-use iroh_blobs::{store::mem::MemStore, ticket::BlobTicket, BlobsProtocol};
+use tokio::sync::mpsc;
 
 use crate::ui::{REGULAR_SET, WONKY_SET};
+use crate::p2p::SyncState;
 
+mod p2p;
 mod ui;
 
 fn deserialize_name<'de, D>(deserializer: D) -> Result<Option<Name>, D::Error>
@@ -29,13 +30,31 @@ where
 	}
 }
 
-/// Application state. Can be expanded later with UI data.
+// Application state. Can be expanded later with UI data.
 struct App {
 	should_quit:          bool,
 	store:                PasswordStore,
 	focused:              Components,
 	list_state:           ListState,
 	detail_focused_field: Option<FocusableField>,
+	// P2P Sync state
+	sync_state:           SyncState,
+	sync_sx:              mpsc::Sender<SyncCommand>,
+	sync_rx:              mpsc::Receiver<SyncResult>,
+}
+
+// sync task commands
+enum SyncCommand {
+	Share(Vec<u8>),
+	Receive(String),
+	Cancel,
+}
+
+// sync task results
+enum SyncResult {
+	TicketGenerated(String),
+	DataReceived(Vec<u8>),
+	Error(String),
 }
 
 enum Components {
@@ -43,34 +62,35 @@ enum Components {
 	Content,
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct PasswordStore {
 	items: HashMap<String, Item>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 enum Item {
 	OnlineAccount(OnlineAccount),
 	SocialSecurity(SocialSecurity),
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct SocialSecurity {
 	account_number:   String,
-	#[serde(deserialize_with = "deserialize_name")]
+	#[serde(deserialize_with = "deserialize_name", default)]
+	#[serde(skip_serializing)]
 	legal_name:       Option<Name>,
 	issuance_date:    Option<Date>,
 	country_of_issue: Option<Country>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 enum AuthProvider {
 	Google,
 	Apple,
 	Facebook,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct OnlineAccount {
 	#[serde(skip)]
 	account:            String,
@@ -89,13 +109,13 @@ struct OnlineAccount {
 	notes:              Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 enum AccountStatus {
 	Active,
 	Deactivated,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct SecurityQuestion {
 	question: String,
 	answer:   String,
@@ -799,8 +819,8 @@ impl App {
 		self.detail_focused_field = detail_view.focused_field;
 	}
 
-	/// Create a new instance with default values.
-	fn new() -> Self {
+	// Create a new instance with default values.
+	fn new(sync_sx: mpsc::Sender<SyncCommand>, sync_rx: mpsc::Receiver<SyncResult>) -> Self {
 		let mut list = ListState::default();
 		list.select(Some(0usize));
 		let store = load_from_store(PathBuf::from("./store")).unwrap();
@@ -810,15 +830,102 @@ impl App {
 			focused: Components::List,
 			store,
 			list_state: list,
-			detail_focused_field: None, // Initialize as None
+			detail_focused_field: None,
+			sync_state: SyncState::Idle,
+			sync_sx,
+			sync_rx,
 		}
 	}
 
-	/// Run the main event loop until `should_quit` becomes true.
+	// Serialize the password store to bytes for P2P transfer
+	fn serialize_store(&self) -> Result<Vec<u8>> {
+		Ok(toml::to_string(&self.store)?.into_bytes())
+	}
+
+	// Deserialize a password store from bytes received via P2P
+	fn deserialize_store(&mut self, data: &[u8]) -> Result<()> {
+		let received: PasswordStore = toml::from_str(std::str::from_utf8(data)?)?;
+		// Merge each received item into the current store
+		for (key, item) in received.items {
+			self.store.items.insert(key, item);
+		}
+		Ok(())
+	}
+
+	// Save the current store to disk
+	fn save_store(&self) -> Result<()> {
+		for (name, item) in &self.store.items {
+			let path = PathBuf::from("./store").join(format!("{}.acc.toml", name));
+			match item {
+				Item::OnlineAccount(account) => {
+					let content = toml::to_string_pretty(account)?;
+					write(&path, content)?;
+				}
+				Item::SocialSecurity(ssn) => {
+					let content = toml::to_string_pretty(ssn)?;
+					write(&path, content)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
+	// Start sharing passwords via P2P
+	fn start_sharing(&mut self) {
+		if let Ok(data) = self.serialize_store() {
+			let _ = self.sync_sx.try_send(SyncCommand::Share(data));
+			self.sync_state = SyncState::Sharing { ticket: "Generating ticket".to_string() };
+		}
+	}
+
+	// Start receiving passwords via P2P
+	fn start_receiving(&mut self) {
+		self.sync_state = SyncState::ReceiveInput { input: String::new() };
+	}
+
+	// Cancel current sync operation
+	fn cancel_sync(&mut self) {
+		let _ = self.sync_sx.try_send(SyncCommand::Cancel);
+		self.sync_state = SyncState::Idle;
+	}
+
+	// Check for sync results from background task
+	fn poll_sync_results(&mut self) {
+		while let Ok(result) = self.sync_rx.try_recv() {
+			match result {
+				SyncResult::TicketGenerated(ticket) => {
+					self.sync_state = SyncState::Sharing { ticket };
+				}
+				SyncResult::DataReceived(data) => {
+					match self.deserialize_store(&data) {
+						Ok(_) => {
+							let _ = self.save_store();
+							self.sync_state = SyncState::Completed {
+								message: "Passwords received and saved!".to_string(),
+							};
+						}
+						Err(e) => {
+							self.sync_state = SyncState::Error {
+								message: format!("Failed to parse data: {}", e),
+							};
+						}
+					}
+				}
+				SyncResult::Error(msg) => {
+					self.sync_state = SyncState::Error { message: msg };
+				}
+			}
+		}
+	}
+
+	// Run the main event loop until `should_quit` becomes true.
 	fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-		const TICK_RATE: Duration = Duration::from_millis(1000);
+		const TICK_RATE: Duration = Duration::from_millis(100);
 
 		while !self.should_quit {
+			// Poll for sync results from background task
+			self.poll_sync_results();
+
 			terminal.draw(|f| self.render(f)).context("failed to draw frame")?;
 
 			// Handle input with timeout
@@ -833,7 +940,7 @@ impl App {
 		Ok(())
 	}
 
-	/// Render the frame each loop iteration.
+	// Render the frame each loop iteration.
 	fn render(&self, frame: &mut Frame) {
 		let layout = Layout::default()
 			.direction(Direction::Horizontal)
@@ -871,6 +978,148 @@ impl App {
 
 		ItemDetailView { item: selected_item, focused_field: self.detail_focused_field }
 			.render(frame, area2);
+
+		// Render sync overlay if active
+		self.render_sync_overlay(frame);
+	}
+
+	// Render the P2P sync modal overlay
+	fn render_sync_overlay(&self, frame: &mut Frame) {
+		if matches!(self.sync_state, SyncState::Idle) {
+			return;
+		}
+
+		// Create a centered modal area
+		let area = frame.area();
+		let modal_width = 70.min(area.width.saturating_sub(4));
+		let modal_height = 14.min(area.height.saturating_sub(4));
+		let modal_area = Rect {
+			x: (area.width.saturating_sub(modal_width)) / 2,
+			y: (area.height.saturating_sub(modal_height)) / 2,
+			width: modal_width,
+			height: modal_height,
+		};
+
+		// Clear the modal area
+		frame.render_widget(Clear, modal_area);
+
+		let (title, content, border_color) = match &self.sync_state {
+			SyncState::Idle => unreachable!(),
+			SyncState::Sharing { ticket } => {
+				let content = vec![
+					Line::from(vec![
+						Span::styled("Sharing your passwords...", Style::default().fg(Color::White)),
+					]),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Share this ticket with another device:",
+						Style::default().fg(Color::Yellow),
+					)),
+					Line::from(""),
+					Line::from(Span::styled(
+						if ticket.len() > 60 { &ticket[..60] } else { ticket },
+						Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+					)),
+					Line::from(Span::styled(
+						if ticket.len() > 60 { &ticket[60..ticket.len().min(120)] } else { "" },
+						Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+					)),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Waiting for connection... Press [Esc] to cancel",
+						Style::default().fg(Color::DarkGray),
+					)),
+				];
+				("P2P Share ", content, Color::Green)
+			}
+			SyncState::ReceiveInput { input } => {
+				let content = vec![
+					Line::from(vec![
+						Span::styled("Receive passwords from another device", Style::default().fg(Color::White)),
+					]),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Enter the ticket from the sharing device:",
+						Style::default().fg(Color::Yellow),
+					)),
+					Line::from(""),
+					Line::from(vec![
+						Span::styled("> ", Style::default().fg(Color::Green)),
+						Span::styled(input, Style::default().fg(Color::Cyan)),
+						Span::styled("█", Style::default().fg(Color::White)),
+					]),
+					Line::from(""),
+					Line::from(""),
+					Line::from(Span::styled(
+						"[Enter] Connect  [Esc] Cancel  [Ctrl+V] Paste",
+						Style::default().fg(Color::DarkGray),
+					)),
+				];
+				("P2P Receive ", content, Color::Blue)
+			}
+			SyncState::Receiving => {
+				let content = vec![
+					Line::from(""),
+					Line::from(vec![
+						Span::styled("Connecting and downloading...", Style::default().fg(Color::White)),
+					]),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Please wait while we fetch your passwords.",
+						Style::default().fg(Color::DarkGray),
+					)),
+				];
+				("Receiving ", content, Color::Yellow)
+			}
+			SyncState::Completed { message } => {
+				let content = vec![
+					Line::from(""),
+					Line::from(vec![
+						Span::styled("Sync Complete!", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+					]),
+					Line::from(""),
+					Line::from(Span::styled(message, Style::default().fg(Color::White))),
+					Line::from(""),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Press [Enter] or [Esc] to close",
+						Style::default().fg(Color::DarkGray),
+					)),
+				];
+				("Success ", content, Color::Green)
+			}
+			SyncState::Error { message } => {
+				let content = vec![
+					Line::from(""),
+					Line::from(vec![
+						Span::styled("❌ ", Style::default().fg(Color::Red)),
+						Span::styled("Sync Failed", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+					]),
+					Line::from(""),
+					Line::from(Span::styled(message, Style::default().fg(Color::White))),
+					Line::from(""),
+					Line::from(""),
+					Line::from(Span::styled(
+						"Press [Enter] or [Esc] to close",
+						Style::default().fg(Color::DarkGray),
+					)),
+				];
+				("Error ", content, Color::Red)
+			}
+		};
+
+		let modal = Paragraph::new(content)
+			.block(
+				Block::default()
+					.title(title)
+					.title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+					.borders(Borders::ALL)
+					.border_style(Style::default().fg(border_color))
+					.bg(Color::Black),
+			)
+			.wrap(Wrap { trim: false });
+
+		frame.render_widget(modal, modal_area);
 	}
 
 	fn copy_field(&self) -> Result<()> {
@@ -931,6 +1180,12 @@ impl App {
 	}
 
 	fn handle_key(&mut self, key_event: event::KeyEvent) {
+		// Handle sync modal input first if active
+		if !matches!(self.sync_state, SyncState::Idle) {
+			self.handle_sync_key(key_event);
+			return;
+		}
+
 		match self.focused {
 			Components::List => {
 				match key_event.code {
@@ -942,6 +1197,9 @@ impl App {
 						// Initialize with first field
 						self.detail_focused_field = self.get_first_field_for_current_item();
 					}
+					// P2P Sync shortcuts
+					KeyCode::Char('s') => self.start_sharing(),
+					KeyCode::Char('r') => self.start_receiving(),
 					_ => {}
 				}
 			}
@@ -954,8 +1212,60 @@ impl App {
 				KeyCode::Down | KeyCode::Char('j') => self.focus_next_field(),
 				KeyCode::Char(' ') => self.copy_field().unwrap(),
 				KeyCode::Up | KeyCode::Char('k') => self.focus_prev_field(),
+				// P2P Sync shortcuts
+				KeyCode::Char('s') => self.start_sharing(),
+				KeyCode::Char('r') => self.start_receiving(),
 				_ => {}
 			},
+		}
+	}
+
+	/// Handle key events when sync modal is active
+	fn handle_sync_key(&mut self, key_event: event::KeyEvent) {
+		match &mut self.sync_state {
+			SyncState::Sharing { .. } => {
+				if matches!(key_event.code, KeyCode::Esc) {
+					self.cancel_sync();
+				}
+			}
+			SyncState::ReceiveInput { input } => {
+				match key_event.code {
+					KeyCode::Esc => {
+						self.sync_state = SyncState::Idle;
+					}
+					KeyCode::Enter => {
+						if !input.is_empty() {
+							let ticket = input.clone();
+							let _ = self.sync_sx.try_send(SyncCommand::Receive(ticket));
+							self.sync_state = SyncState::Receiving;
+						}
+					}
+					KeyCode::Backspace => {
+						input.pop();
+					}
+					KeyCode::Char('v') if key_event.modifiers.contains(event::KeyModifiers::CONTROL) => {
+						// Paste from clipboard
+						if let Ok(mut clipboard) = arboard::Clipboard::new() {
+							if let Ok(text) = clipboard.get_text() {
+								input.push_str(&text);
+							}
+						}
+					}
+					KeyCode::Char(c) => {
+						input.push(c);
+					}
+					_ => {}
+				}
+			}
+			SyncState::Receiving => {
+				// Can't cancel during receive, just wait
+			}
+			SyncState::Completed { .. } | SyncState::Error { .. } => {
+				if matches!(key_event.code, KeyCode::Enter | KeyCode::Esc) {
+					self.sync_state = SyncState::Idle;
+				}
+			}
+			SyncState::Idle => {}
 		}
 	}
 
@@ -1026,21 +1336,76 @@ async fn main() -> Result<()> {
 	let backend = CrosstermBackend::new(stdout);
 	let mut terminal = Terminal::new(backend).context("failed to create terminal")?;
 
-	let endpoint = Endpoint::bind().await?;
-	let store = MemStore::new();
-	let blobs = BlobsProtocol::new(&store, None);
+	// Create channels for P2P sync communication
+	let (cmd_tx, mut cmd_rx) = mpsc::channel::<SyncCommand>(10);
+	let (result_tx, result_rx) = mpsc::channel::<SyncResult>(10);
 
-	run_app(&mut terminal)
+	// Spawn the P2P sync background task
+	tokio::spawn(async move {
+		let mut p2p: Option<p2p::P2PSync> = None;
+
+		while let Some(cmd) = cmd_rx.recv().await {
+			match cmd {
+				SyncCommand::Share(data) => {
+					match p2p::P2PSync::new().await {
+						Ok(mut sync) => {
+							match sync.share_data(data).await {
+								Ok(ticket) => {
+									let _ = result_tx.send(SyncResult::TicketGenerated(ticket)).await;
+									p2p = Some(sync);
+								}
+								Err(e) => {
+									let _ = result_tx.send(SyncResult::Error(e.to_string())).await;
+								}
+							}
+						}
+						Err(e) => {
+							let _ = result_tx.send(SyncResult::Error(e.to_string())).await;
+						}
+					}
+				}
+				SyncCommand::Receive(ticket) => {
+					match p2p::P2PSync::new().await {
+						Ok(sync) => {
+							match sync.receive_data(&ticket).await {
+								Ok(data) => {
+									let _ = result_tx.send(SyncResult::DataReceived(data)).await;
+									let _ = sync.shutdown().await;
+								}
+								Err(e) => {
+									let _ = result_tx.send(SyncResult::Error(e.to_string())).await;
+								}
+							}
+						}
+						Err(e) => {
+							let _ = result_tx.send(SyncResult::Error(e.to_string())).await;
+						}
+					}
+				}
+				SyncCommand::Cancel => {
+					if let Some(sync) = p2p.take() {
+						let _ = sync.shutdown().await;
+					}
+				}
+			}
+		}
+	});
+
+	run_app(&mut terminal, cmd_tx, result_rx)
 }
 
 /// Create and run the app with proper error bubbling.
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+fn run_app(
+	terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+	sync_sx: mpsc::Sender<SyncCommand>,
+	sync_rx: mpsc::Receiver<SyncResult>,
+) -> Result<()> {
 	let _stdout = io::stdout();
 
 	// Enter the alternative screen for transparent resets
 	terminal.clear()?;
 
-	let mut app = App::new();
+	let mut app = App::new(sync_sx, sync_rx);
 	app.run(terminal).context("application run failed")?;
 
 	// Cleanup always restore terminal state before exiting, even on errors
