@@ -55,7 +55,7 @@ impl P2PSync {
     // The data should be serialized password store bytes
     pub async fn share_data(&mut self, data: Vec<u8>) -> Result<String> {
         // Import the data as a blob
-        let tag = self.store.blobs().add_bytes(data).await?;
+        let tag = self.blobs.add_bytes(data).await?;
 
         // Create ticket with our node info
         let node_id = self.endpoint.id();
@@ -83,7 +83,7 @@ impl P2PSync {
             .await?;
 
         // Read the blob data using get_bytes
-        let data = self.store.blobs().get_bytes(ticket.hash()).await?;
+        let data = self.blobs.get_bytes(ticket.hash()).await?;
 
         Ok(data.to_vec())
     }
@@ -134,11 +134,10 @@ impl P2PSyncHandle {
         if guard.is_none() {
             *guard = Some(P2PSync::new().await?);
         }
-        if let Some(ref sync) = *guard {
-            sync.receive_data(ticket).await
-        } else {
-            anyhow::bail!("P2P sync not initialized")
-        }
+        let sync = guard
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("P2P sync not initialized"))?;
+        sync.receive_data(ticket).await
     }
 
     // Shutdown and cleanup
