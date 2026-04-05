@@ -3,6 +3,7 @@ use color_eyre::eyre::{Context, Result};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{prelude::*, widgets::{ListState, Block, Borders}};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use walkdir::WalkDir;
 
 use crate::models::{PasswordStore, Item, OnlineAccount, AccountStatus, AuthProvider};
@@ -27,10 +28,15 @@ pub struct App {
 	pub sync_state:           SyncState,
 	pub sync_sx:              mpsc::Sender<SyncCommand>,
 	pub sync_rx:              mpsc::Receiver<SyncResult>,
+	pub background_handle:    JoinHandle<anyhow::Result<()>>,
 }
 
 impl App {
-	pub fn new(sync_sx: mpsc::Sender<SyncCommand>, sync_rx: mpsc::Receiver<SyncResult>) -> Self {
+	pub fn new(
+		sync_sx: mpsc::Sender<SyncCommand>,
+		sync_rx: mpsc::Receiver<SyncResult>,
+		background_handle: JoinHandle<anyhow::Result<()>>
+	) -> Self {
 		let mut list = ListState::default();
 		list.select(Some(0usize));
 		let store = load_from_store(PathBuf::from("./store")).unwrap();
@@ -44,6 +50,7 @@ impl App {
 			sync_state: SyncState::Idle,
 			sync_sx,
 			sync_rx,
+			background_handle
 		}
 	}
 

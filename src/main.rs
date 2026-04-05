@@ -3,6 +3,7 @@ use color_eyre::eyre::{Context, Result};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::prelude::*;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 mod app;
 mod models;
@@ -27,7 +28,7 @@ async fn main() -> Result<()> {
 	let (result_tx, result_rx) = mpsc::channel::<SyncResult>(10);
 
 	// Spawn the P2P sync background task
-	tokio::spawn(async move {
+	let background: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
 		let mut p2p_instance: Option<p2p::P2PSync> = None;
 
 		while let Some(cmd) = cmd_rx.recv().await {
@@ -75,9 +76,11 @@ async fn main() -> Result<()> {
 				}
 			}
 		}
+
+		anyhow::bail!("jawn ended")
 	});
 
-	run_app(&mut terminal, cmd_tx, result_rx)
+	run_app(&mut terminal, cmd_tx, result_rx, background)
 }
 
 /// Create and run the app with proper error bubbling.
@@ -85,15 +88,16 @@ fn run_app(
 	terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 	sync_sx: mpsc::Sender<SyncCommand>,
 	sync_rx: mpsc::Receiver<SyncResult>,
+	handle: JoinHandle<anyhow::Result<()>>
 ) -> Result<()> {
 	// Enter the alternative screen for transparent resets
 	terminal.clear()?;
 
-	let mut app = App::new(sync_sx, sync_rx);
-	app.run(terminal).context("application run failed")?;
+	let mut app = App::new(sync_sx, sync_rx, handle);
+	let res = app.run(terminal).context("application run failed");
 
 	// Cleanup always restore terminal state before exiting, even on errors
 	disable_raw_mode().ok();
 
-	Ok(())
+	res
 }
