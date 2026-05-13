@@ -123,7 +123,6 @@ impl IrohSync {
 		Ok(StorePayload(bytes.to_vec()))
 	}
 
-
 	/// Gracefully shut down the router and release the endpoint.
 	pub async fn shutdown(mut self) -> PwdResult<()> {
 		if let Some(handles) = self.handles.take() {

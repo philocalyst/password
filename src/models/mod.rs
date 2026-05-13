@@ -115,7 +115,5 @@ mod tests {
 	}
 
 	#[test]
-	fn item_kind_str() {
-		let _store = PasswordStore::new();
-	}
+	fn item_kind_str() { let _store = PasswordStore::new(); }
 }

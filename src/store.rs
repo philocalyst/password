@@ -70,7 +70,6 @@ pub trait StoreBackend {
 pub trait Versioned {
 	type Error: std::error::Error + Send + Sync + 'static;
 
-
 	/// Snapshot the current state of a single entry and return its patch hash.
 	fn record_entry(
 		&self,
@@ -87,7 +86,6 @@ pub trait Versioned {
 		name: &AccountName,
 		target: &Hash,
 	) -> std::result::Result<(), Self::Error>;
-
 
 	/// Chronological change log, optionally filtered to a single entry in a
 	/// branch.
@@ -122,7 +120,6 @@ pub trait Versioned {
 		name: &AccountName,
 	) -> std::result::Result<Option<Hash>, Self::Error>;
 }
-
 
 #[derive(Debug, Clone)]
 pub struct StorePayload(pub Vec<u8>);
