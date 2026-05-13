@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
-use crate::{
-	p2p::{IrohSyncHandle, decode_store, encode_store},
-	store::{ShareTicket, StoreBackend},
-};
-
 use super::{error::FfiError, store::PwdStore};
+use crate::{p2p::{IrohSyncHandle, decode_store, encode_store}, store::{ShareTicket, StoreBackend}};
 
 /// Synchronous handle to the Iroh P2P stack.
 ///
@@ -35,16 +31,14 @@ impl P2PHandle {
 			let loaded = inner.load(&store.branch).map_err(FfiError::from)?;
 			encode_store(&loaded).map_err(FfiError::from)?
 		};
-		let ticket =
-			self.rt.block_on(self.inner.share(payload)).map_err(FfiError::from)?;
+		let ticket = self.rt.block_on(self.inner.share(payload)).map_err(FfiError::from)?;
 		Ok(ticket.to_string())
 	}
 
 	/// Download the store from `ticket` and merge it into `target_store`.
 	pub fn receive_into(&self, ticket: String, target_store: Arc<PwdStore>) -> Result<u64, FfiError> {
 		let share_ticket = ShareTicket(ticket);
-		let payload =
-			self.rt.block_on(self.inner.receive(&share_ticket)).map_err(FfiError::from)?;
+		let payload = self.rt.block_on(self.inner.receive(&share_ticket)).map_err(FfiError::from)?;
 		let received = decode_store(payload).map_err(FfiError::from)?;
 		let count = received.items.len() as u64;
 		{
@@ -64,7 +58,5 @@ impl P2PHandle {
 	}
 
 	/// Returns `true` if the Iroh node is running.
-	pub fn is_active(&self) -> bool {
-		self.rt.block_on(self.inner.is_active())
-	}
+	pub fn is_active(&self) -> bool { self.rt.block_on(self.inner.is_active()) }
 }

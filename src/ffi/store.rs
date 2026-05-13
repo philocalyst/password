@@ -2,16 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use pijul_at_core::Base32;
 
-use crate::{
-	models::AccountName,
-	store::{DiffResult, StoreBackend, VersionedEntry},
-	versioning::PijulStore,
-};
-
-use super::{
-	error::FfiError,
-	types::{FfiChangeEntry, FfiItem},
-};
+use super::{error::FfiError, types::{FfiChangeEntry, FfiItem}};
+use crate::{models::AccountName, store::{DiffResult, StoreBackend, VersionedEntry}, versioning::PijulStore};
 
 /// Thread-safe handle to a Pijul-backed credential store on a single branch.
 #[derive(uniffi::Object)]
@@ -41,7 +33,14 @@ impl PwdStore {
 
 	pub fn list_entries(&self) -> Result<Vec<String>, FfiError> {
 		let inner = self.inner.lock().unwrap();
-		Ok(inner.list(&self.branch).map_err(FfiError::from)?.into_iter().map(|n| n.to_string()).collect())
+		Ok(
+			inner
+				.list(&self.branch)
+				.map_err(FfiError::from)?
+				.into_iter()
+				.map(|n| n.to_string())
+				.collect(),
+		)
 	}
 
 	pub fn get_entry(&self, name: String) -> Result<Option<FfiItem>, FfiError> {
@@ -78,16 +77,16 @@ impl PwdStore {
 	// ── history ───────────────────────────────────────────────────────────────
 
 	pub fn log_history(&self, entry_filter: Option<String>) -> Result<Vec<FfiChangeEntry>, FfiError> {
-		let filter = entry_filter
-			.map(|n| AccountName::new(&n).map_err(FfiError::from))
-			.transpose()?;
+		let filter = entry_filter.map(|n| AccountName::new(&n).map_err(FfiError::from)).transpose()?;
 		let inner = self.inner.lock().unwrap();
-		Ok(inner
-			.log_impl(&self.branch, filter.as_ref())
-			.map_err(FfiError::from)?
-			.into_iter()
-			.map(FfiChangeEntry::from)
-			.collect())
+		Ok(
+			inner
+				.log_impl(&self.branch, filter.as_ref())
+				.map_err(FfiError::from)?
+				.into_iter()
+				.map(FfiChangeEntry::from)
+				.collect(),
+		)
 	}
 
 	pub fn revert_entry(&self, name: String, to_hash: String) -> Result<(), FfiError> {
@@ -121,10 +120,12 @@ impl PwdStore {
 	pub fn head_hash(&self, name: String) -> Result<Option<String>, FfiError> {
 		let name = AccountName::new(&name).map_err(FfiError::from)?;
 		let inner = self.inner.lock().unwrap();
-		Ok(inner
-			.entry(&self.branch, name)
-			.head()
-			.map_err(FfiError::from)?
-			.map(|h: pijul_at_core::Hash| h.to_base32()))
+		Ok(
+			inner
+				.entry(&self.branch, name)
+				.head()
+				.map_err(FfiError::from)?
+				.map(|h: pijul_at_core::Hash| h.to_base32()),
+		)
 	}
 }

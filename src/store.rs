@@ -31,11 +31,8 @@ pub trait StoreBackend {
 	fn save(&self, branch: &str, store: &PasswordStore) -> std::result::Result<(), Self::Error>;
 
 	fn list(&self, branch: &str) -> std::result::Result<Vec<AccountName>, Self::Error>;
-	fn get(
-		&self,
-		branch: &str,
-		name: &AccountName,
-	) -> std::result::Result<Option<Item>, Self::Error>;
+	fn get(&self, branch: &str, name: &AccountName)
+	-> std::result::Result<Option<Item>, Self::Error>;
 
 	/// Insert and immediately snapshot the entry as a Pijul patch.
 	fn insert(
@@ -77,12 +74,9 @@ pub trait VersionedEntry {
 	/// Chronological change log for this entry.
 	fn log(&self) -> std::result::Result<Vec<ChangeEntry>, Self::Error>;
 
-	/// Structured diff between `from` and `to` (or current state if `to` is `None`).
-	fn diff(
-		&self,
-		from: &Hash,
-		to: Option<&Hash>,
-	) -> std::result::Result<DiffResult, Self::Error>;
+	/// Structured diff between `from` and `to` (or current state if `to` is
+	/// `None`).
+	fn diff(&self, from: &Hash, to: Option<&Hash>) -> std::result::Result<DiffResult, Self::Error>;
 
 	/// The entry's content as it was immediately after patch `at` was applied.
 	fn snapshot_at(&self, at: &Hash) -> std::result::Result<Option<Item>, Self::Error>;
@@ -91,13 +85,15 @@ pub trait VersionedEntry {
 	fn head(&self) -> std::result::Result<Option<Hash>, Self::Error>;
 }
 
-// ── P2P payload types ─────────────────────────────────────────────────────────
+// ── P2P payload types
+// ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct StorePayload(pub Vec<u8>);
 
 impl StorePayload {
 	pub fn into_inner(self) -> Vec<u8> { self.0 }
+
 	pub fn as_bytes(&self) -> &[u8] { &self.0 }
 }
 

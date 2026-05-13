@@ -31,9 +31,7 @@ impl From<PwdError> for FfiError {
 	fn from(e: PwdError) -> Self {
 		match e {
 			PwdError::EntryNotFound { name } => Self::EntryNotFound { name: name.to_string() },
-			PwdError::EntryAlreadyExists { name } => {
-				Self::EntryAlreadyExists { name: name.to_string() }
-			}
+			PwdError::EntryAlreadyExists { name } => Self::EntryAlreadyExists { name: name.to_string() },
 			PwdError::InvalidAccountName(msg) => Self::InvalidAccountName { msg },
 			PwdError::InvalidTicket(msg) => Self::InvalidTicket { msg },
 			PwdError::NothingToRecord => Self::NothingToRecord,

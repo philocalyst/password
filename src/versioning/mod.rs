@@ -308,7 +308,8 @@ impl StoreBackend for PijulStore {
 	}
 }
 
-// ── Entry handle ──────────────────────────────────────────────────────────────
+// ── Entry handle
+// ──────────────────────────────────────────────────────────────
 
 /// A borrowed reference to a specific entry in a branch.
 ///
@@ -498,7 +499,12 @@ impl PijulStore {
 		Ok(DiffResult { label: format!("{branch}/{name}"), lines: tokens })
 	}
 
-	pub fn snapshot_entry_at(&self, branch: &str, name: &AccountName, at: &Hash) -> Result<Option<Item>> {
+	pub fn snapshot_entry_at(
+		&self,
+		branch: &str,
+		name: &AccountName,
+		at: &Hash,
+	) -> Result<Option<Item>> {
 		let header = self.repo.changes.get_header(at).map_err(|e| Error::Pijul(e.to_string()))?;
 		if header.description.as_deref().map(|d| d.contains(name.as_str())) != Some(true) {
 			return Ok(None);

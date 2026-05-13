@@ -1,19 +1,13 @@
+use super::error::FfiError;
 /// FFI-safe mirrors of the internal credential types.
 ///
 /// All domain-typed fields (URL, email, phone, date, country) are exposed as
 /// plain Strings.  Validation of inbound data happens inside `PwdStore` before
 /// it reaches the internal `OnlineAccount`/`SocialSecurity` types.
-use crate::{
-	models::{
-		Item, OnlineAccount, OnlineAccountSecurityQuestionsItem, OnlineAccountSignInWithItem,
-		OnlineAccountStatus, SocialSecurity,
-	},
-	versioning::ChangeEntry,
-};
+use crate::{models::{Item, OnlineAccount, OnlineAccountSecurityQuestionsItem, OnlineAccountSignInWithItem, OnlineAccountStatus, SocialSecurity}, versioning::ChangeEntry};
 
-use super::error::FfiError;
-
-// ── item types ────────────────────────────────────────────────────────────────
+// ── item types
+// ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum FfiItem {
@@ -69,7 +63,8 @@ pub struct FfiChangeEntry {
 	pub entry_name: Option<String>,
 }
 
-// ── internal → FFI ────────────────────────────────────────────────────────────
+// ── internal → FFI
+// ────────────────────────────────────────────────────────────
 
 impl From<Item> for FfiItem {
 	fn from(item: Item) -> Self {
@@ -86,17 +81,14 @@ impl From<OnlineAccount> for FfiOnlineAccount {
 			username:           a.username,
 			password:           a.password,
 			email:              a.email.as_ref().map(|e| e.to_string()),
-			phone:              a.phone.as_ref().map(|p| {
-				phonenumber::format(p).mode(phonenumber::Mode::E164).to_string()
-			}),
-			sign_in_with:       a
-				.sign_in_with
-				.map(|v| v.into_iter().map(|s| s.to_string()).collect()),
+			phone:              a
+				.phone
+				.as_ref()
+				.map(|p| phonenumber::format(p).mode(phonenumber::Mode::E164).to_string()),
+			sign_in_with:       a.sign_in_with.map(|v| v.into_iter().map(|s| s.to_string()).collect()),
 			status:             a.status.as_ref().map(|s| s.to_string()),
 			host_website:       a.host_website.as_ref().map(|u| u.to_string()),
-			login_pages:        a
-				.login_pages
-				.map(|v| v.into_iter().map(|u| u.to_string()).collect()),
+			login_pages:        a.login_pages.map(|v| v.into_iter().map(|u| u.to_string()).collect()),
 			security_questions: a.security_questions.map(|v| {
 				v.into_iter()
 					.map(|q| FfiSecurityQuestion { question: q.question, answer: q.answer })
@@ -134,7 +126,8 @@ impl From<ChangeEntry> for FfiChangeEntry {
 	}
 }
 
-// ── FFI → internal ────────────────────────────────────────────────────────────
+// ── FFI → internal
+// ────────────────────────────────────────────────────────────
 
 impl TryFrom<FfiItem> for Item {
 	type Error = FfiError;
@@ -170,8 +163,7 @@ impl TryFrom<FfiOnlineAccount> for OnlineAccount {
 		let host_website = a
 			.host_website
 			.map(|s| {
-				s.parse::<url::Url>()
-					.map_err(|e| FfiError::Other { msg: format!("invalid URL: {e}") })
+				s.parse::<url::Url>().map_err(|e| FfiError::Other { msg: format!("invalid URL: {e}") })
 			})
 			.transpose()?;
 
@@ -240,9 +232,9 @@ impl TryFrom<FfiOnlineAccount> for OnlineAccount {
 			login_pages,
 			security_questions,
 			two_factor_enabled: a.two_factor_enabled,
-			associated_items:   a.associated_items,
+			associated_items: a.associated_items,
 			date_created,
-			notes:              a.notes,
+			notes: a.notes,
 		})
 	}
 }
@@ -282,7 +274,8 @@ impl TryFrom<FfiSocialSecurity> for SocialSecurity {
 	}
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── helpers
+// ───────────────────────────────────────────────────────────────────
 
 fn country_alpha2(c: &celes::Country) -> String {
 	// celes serialises to its alpha-2 code via serde; roundtrip to extract it.
