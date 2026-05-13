@@ -28,13 +28,13 @@ enum Cmd {
 	/// Add a new credential entry.
 	Add {
 		/// Unique name for this entry.
-		name:     String,
+		name: String,
 
-		/// Ee: "online" (default) or "ssn".
+		/// Entry type: "online" (default) or "ssn".
 		#[arg(long, default_value = "online")]
-		r#type:   String,
+		r#type: String,
 
-		/// Pasd (online accounts only).
+		/// Password (online accounts only).
 		#[arg(long)]
 		password: Option<String>,
 
@@ -44,23 +44,23 @@ enum Cmd {
 
 		/// E-mail address.
 		#[arg(long)]
-		email:    Option<String>,
+		email: Option<String>,
 
-		/// Hosite URL.
+		/// Host website URL.
 		#[arg(long)]
-		website:  Option<String>,
+		website: Option<String>,
 
-		/// Reco message for history.
+		/// Record message for history.
 		#[arg(long, short = 'm', default_value = "add entry")]
-		message:  String,
+		message: String,
 	},
 
 	/// Print a credential entry to stdout.
 	Get {
 		/// Entry name.
-		name:  String,
+		name: String,
 
-		/// Pnt only this field (e.g. "password", "username").
+		/// Print only this field (e.g. "password", "username").
 		#[arg(long)]
 		field: Option<String>,
 	},
@@ -68,9 +68,9 @@ enum Cmd {
 	/// Remove a credential entry.
 	Remove {
 		/// Entry name.
-		name:    String,
+		name: String,
 
-		/// Rmessage for history.
+		/// Record message for history.
 		#[arg(long, short = 'm', default_value = "remove entry")]
 		message: String,
 	},
@@ -92,7 +92,7 @@ enum Cmd {
 
 		/// Patch hash (base32) to restore to.
 		#[arg(long)]
-		at:   String,
+		at: String,
 	},
 
 	/// Revert an entry to the state it had after a specific patch.
@@ -102,7 +102,7 @@ enum Cmd {
 
 		/// Target patch hash (base32).
 		#[arg(long)]
-		to:   String,
+		to: String,
 	},
 
 	/// Show a unified diff of an entry between two patches.
@@ -116,7 +116,7 @@ enum Cmd {
 
 		/// Patch hash to diff to (omit to diff against current state).
 		#[arg(long)]
-		to:   Option<String>,
+		to: Option<String>,
 	},
 
 	/// Share the store branch via Iroh; prints a ticket for the receiver.
@@ -128,6 +128,8 @@ enum Cmd {
 		ticket: String,
 	},
 }
+
+// ── entry point
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -160,6 +162,7 @@ async fn main() -> anyhow::Result<()> {
 					let host_website = website.as_deref().map(|u| u.parse::<url::Url>()).transpose()?;
 					let email_addr =
 						email.as_deref().map(|e| e.parse::<email_address::EmailAddress>()).transpose()?;
+
 					Item::OnlineAccount(OnlineAccount {
 						username,
 						password,
@@ -177,8 +180,9 @@ async fn main() -> anyhow::Result<()> {
 					})
 				}
 			};
+
 			store.insert(branch, account_name.clone(), item)?;
-			store.record_entry(branch, &account_name, &message)?;
+			let _ = store.record_entry(branch, &account_name, &message);
 			println!("Added '{name}' to branch '{branch}'");
 		}
 
@@ -229,16 +233,16 @@ async fn main() -> anyhow::Result<()> {
 			}
 			for e in entries {
 				let scope = e.entry_name.as_ref().map(|n| format!(" [{}]", n)).unwrap_or_default();
-				println!("{}{scope}  {}  {}", e.hash, e.timestamp, e.message);
+				println!("{}  {}  {}{scope}", e.hash, e.timestamp, e.message);
 			}
 		}
 
-		// ── show ──────────────────────────────────────────────────────────────
 		Cmd::Show { name, at } => {
 			let account_name = AccountName::new(&name)?;
 			use pijul_at_core::Base32;
 			let hash = pijul_at_core::Hash::from_base32(at.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {at}"))?;
+
 			match store.show_entry_at(branch, &account_name, &hash)? {
 				Some(item) => println!("{}", toml::to_string_pretty(&item)?),
 				None => eprintln!("Entry '{name}' not found at patch {at}"),
@@ -250,6 +254,7 @@ async fn main() -> anyhow::Result<()> {
 			use pijul_at_core::Base32;
 			let hash = pijul_at_core::Hash::from_base32(to.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {to}"))?;
+
 			store.revert_entry(branch, &account_name, &hash)?;
 			println!("Reverted '{name}' to {to} on branch '{branch}'");
 		}
@@ -266,14 +271,16 @@ async fn main() -> anyhow::Result<()> {
 						.ok_or_else(|| anyhow::anyhow!("invalid 'to' hash"))
 				})
 				.transpose()?;
+
 			let diff = store.diff_entry(branch, &account_name, &from_hash, to_hash.as_ref())?;
 
 			println!("diff for {}", diff.label);
 			for line in diff.lines {
+				use password::store::DiffOp;
 				match line.op {
-					password::store::DiffOp::Retain => println!("  {}", line.content),
-					password::store::DiffOp::Insert => println!("+ {}", line.content),
-					password::store::DiffOp::Delete => println!("- {}", line.content),
+					DiffOp::Retain => println!("  {}", line.content),
+					DiffOp::Insert => println!("+ {}", line.content),
+					DiffOp::Delete => println!("- {}", line.content),
 				}
 			}
 		}
@@ -281,9 +288,12 @@ async fn main() -> anyhow::Result<()> {
 		Cmd::Share => {
 			let loaded = store.load(branch)?;
 			let payload = encode_store(&loaded)?;
+
 			let handle = IrohSyncHandle::new();
 			let ticket = handle.share(payload).await?;
 			println!("{ticket}");
+
+			// Wait for termination.
 			tokio::signal::ctrl_c().await?;
 			handle.shutdown().await?;
 		}
