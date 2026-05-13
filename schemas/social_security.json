@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "social_security",
+  "title": "SocialSecurity",
+  "description": "A social-security / national ID credential.",
+  "type": "object",
+  "required": [
+    "account_number"
+  ],
+  "properties": {
+    "account_number": {
+      "description": "SSN or national ID number.",
+      "type": "string",
+      "minLength": 1
+    },
+    "legal_name": {
+      "description": "Legal name.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "issuance_date": {
+      "description": "Date the ID was issued (civil date, no timezone).",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "format": "date",
+          "x-rust-type": {
+            "crate": "jiff",
+            "version": ">=0.2, <1",
+            "path": "jiff::civil::Date"
+          }
+        }
+      ]
+    },
+    "country_of_issue": {
+      "description": "ISO 3166-1 alpha-2 country code, parsed by the celes crate.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "x-rust-type": {
+            "crate": "celes",
+            "version": ">=2, <3",
+            "path": "celes::Country"
+          }
+        }
+      ]
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "online_account",
+  "title": "OnlineAccount",
+  "description": "A stored online account credential entry.",
+  "type": "object",
+  "properties": {
+    "username": {
+      "description": "Account username or handle.",
+      "type": ["string", "null"]
+    },
+    "email": {
+      "description": "Primary e-mail address.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "format": "email",
+          "x-rust-type": {
+            "crate": "email_address",
+            "version": "0.2.9",
+            "path": "email_address::EmailAddress"
+          }
+        }
+      ]
+    },
+    "phone": {
+      "description": "Phone number in E.164 format.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "x-rust-type": {
+            "crate": "phonenumber",
+            "version": "0.3.7",
+            "path": "phonenumber::PhoneNumber"
+          }
+        }
+      ]
+    },
+    "sign_in_with": {
+      "description": "OAuth / SSO providers used to sign in.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["Google", "Apple", "Facebook", "GitHub", "Microsoft"]
+          }
+        }
+      ]
+    },
+    "password": {
+      "description": "Plain-text password (encrypted at rest by the caller).",
+      "type": ["string", "null"]
+    },
+    "status": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "enum": ["Active", "Deactivated", "Suspended"]
+        }
+      ]
+    },
+    "host_website": {
+      "description": "Root URL of the service.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "format": "uri",
+          "x-rust-type": {
+            "crate": "url",
+            "version": "2.5.0",
+            "path": "url::Url"
+          }
+        }
+      ]
+    },
+    "login_pages": {
+      "description": "Direct login page URLs.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "x-rust-type": {
+              "crate": "url",
+              "version": "2.5.0",
+              "path": "url::Url"
+            }
+          }
+        }
+      ]
+    },
+    "security_questions": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["question", "answer"],
+            "properties": {
+              "question": { "type": "string" },
+              "answer":   { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "date_created": {
+      "description": "Date the account was created (civil, no time zone).",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "format": "date",
+          "x-rust-type": {
+            "crate": "jiff",
+            "version": "0.2.0",
+            "path": "jiff::civil::Date"
+          }
+        }
+      ]
+    },
+    "two_factor_enabled": {
+      "type": ["boolean", "null"]
+    },
+    "associated_items": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "notes": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
+}
