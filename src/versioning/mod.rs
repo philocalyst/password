@@ -8,7 +8,7 @@ use pijul_at_repository::Repository;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
-use crate::{Error, Result, models::{AccountName, Item, PasswordStore}, store::{DiffLine, DiffOp, DiffResult, StoreBackend, Versioned}};
+use crate::{Error, Result, models::{AccountName, Item, PasswordStore}, store::{DiffLine, DiffOp, DiffResult, StoreBackend, VersionedEntry}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeEntry {
@@ -280,25 +280,70 @@ impl StoreBackend for PijulStore {
 		Ok(self.load(branch)?.items.get(name).cloned())
 	}
 
-	fn insert(&self, branch: &str, name: AccountName, item: Item) -> Result<()> {
+	fn insert(&self, branch: &str, name: AccountName, item: Item, msg: &str) -> Result<()> {
 		if self.get(branch, &name)?.is_some() {
 			return Err(Error::EntryAlreadyExists { name });
 		}
-		self.write_entry(branch, &name, &item)
+		self.write_entry(branch, &name, &item)?;
+		let _ = self.pijul_record(branch, &name, msg, true);
+		Ok(())
 	}
 
-	fn update(&self, branch: &str, name: &AccountName, item: Item) -> Result<()> {
+	fn update(&self, branch: &str, name: &AccountName, item: Item, msg: &str) -> Result<()> {
 		if self.get(branch, name)?.is_none() {
 			return Err(Error::EntryNotFound { name: name.clone() });
 		}
-		self.write_entry(branch, name, &item)
+		self.write_entry(branch, name, &item)?;
+		let _ = self.pijul_record(branch, name, msg, true);
+		Ok(())
 	}
 
-	fn remove(&self, branch: &str, name: &AccountName) -> Result<bool> {
+	fn remove(&self, branch: &str, name: &AccountName, msg: &str) -> Result<bool> {
 		let existed = self.get(branch, name)?.is_some();
 		let removed_file = self.remove_entry_file(branch, name)?;
+		if existed || removed_file {
+			let _ = self.pijul_record(branch, name, msg, false);
+		}
 		Ok(existed || removed_file)
 	}
+}
+
+// ── Entry handle ──────────────────────────────────────────────────────────────
+
+/// A borrowed reference to a specific entry in a branch.
+///
+/// Returned by [`PijulStore::entry`]; provides per-entry version operations
+/// without repeating the branch or name on every call.
+pub struct EntryHandle<'s> {
+	store:  &'s PijulStore,
+	branch: String,
+	name:   AccountName,
+}
+
+impl PijulStore {
+	pub fn entry(&self, branch: impl Into<String>, name: AccountName) -> EntryHandle<'_> {
+		EntryHandle { store: self, branch: branch.into(), name }
+	}
+}
+
+impl VersionedEntry for EntryHandle<'_> {
+	type Error = Error;
+
+	fn revert_to(&self, target: &Hash) -> Result<()> {
+		self.store.revert_entry_impl(&self.branch, &self.name, target)
+	}
+
+	fn log(&self) -> Result<Vec<ChangeEntry>> { self.store.log_entry(&self.branch, &self.name) }
+
+	fn diff(&self, from: &Hash, to: Option<&Hash>) -> Result<DiffResult> {
+		self.store.diff_entry_impl(&self.branch, &self.name, from, to)
+	}
+
+	fn snapshot_at(&self, at: &Hash) -> Result<Option<Item>> {
+		self.store.snapshot_entry_at(&self.branch, &self.name, at)
+	}
+
+	fn head(&self) -> Result<Option<Hash>> { self.store.head_entry_hash(&self.branch, &self.name) }
 }
 
 struct DiffSink<'a> {
@@ -327,15 +372,9 @@ impl<'a> imara_diff::sink::Sink for DiffSink<'a> {
 	fn finish(self) -> <DiffSink<'a> as imara_diff::sink::Sink>::Out { self.lines }
 }
 
-impl Versioned for PijulStore {
-	type Error = Error;
-
-	fn record_entry(&self, branch: &str, name: &AccountName, msg: &str) -> Result<Hash> {
-		let exists = self.entry_path(branch, name).exists();
-		self.pijul_record(branch, name, msg, exists)
-	}
-
-	fn revert_entry(&self, branch: &str, name: &AccountName, target: &Hash) -> Result<()> {
+impl PijulStore {
+	/// Revert `name` to the state it had after `target`. Used by `EntryHandle`.
+	pub fn revert_entry_impl(&self, branch: &str, name: &AccountName, target: &Hash) -> Result<()> {
 		let txn = self.repo.pristine.arc_txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
 		let channel = {
 			let mut txn_w = txn.write();
@@ -371,7 +410,13 @@ impl Versioned for PijulStore {
 		Ok(())
 	}
 
-	fn log(&self, branch: &str, filter: Option<&AccountName>) -> Result<Vec<ChangeEntry>> {
+	/// Scoped log for a single entry. Used by `EntryHandle`.
+	pub fn log_entry(&self, branch: &str, name: &AccountName) -> Result<Vec<ChangeEntry>> {
+		self.log_impl(branch, Some(name))
+	}
+
+	/// Full or filtered branch log. Used by the FFI and CLI.
+	pub fn log_impl(&self, branch: &str, filter: Option<&AccountName>) -> Result<Vec<ChangeEntry>> {
 		let txn = self.repo.pristine.txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
 		let channel_ref = match txn.load_channel(branch).map_err(|e| Error::Pijul(e.to_string()))? {
 			Some(c) => c,
@@ -418,7 +463,7 @@ impl Versioned for PijulStore {
 		Ok(entries)
 	}
 
-	fn diff_entry(
+	pub fn diff_entry_impl(
 		&self,
 		branch: &str,
 		name: &AccountName,
@@ -453,7 +498,7 @@ impl Versioned for PijulStore {
 		Ok(DiffResult { label: format!("{branch}/{name}"), lines: tokens })
 	}
 
-	fn show_entry_at(&self, branch: &str, name: &AccountName, at: &Hash) -> Result<Option<Item>> {
+	pub fn snapshot_entry_at(&self, branch: &str, name: &AccountName, at: &Hash) -> Result<Option<Item>> {
 		let header = self.repo.changes.get_header(at).map_err(|e| Error::Pijul(e.to_string()))?;
 		if header.description.as_deref().map(|d| d.contains(name.as_str())) != Some(true) {
 			return Ok(None);
@@ -461,8 +506,8 @@ impl Versioned for PijulStore {
 		Ok(self.get(branch, name)?)
 	}
 
-	fn head_entry(&self, branch: &str, name: &AccountName) -> Result<Option<Hash>> {
-		let entries = self.log(branch, Some(name))?;
+	pub fn head_entry_hash(&self, branch: &str, name: &AccountName) -> Result<Option<Hash>> {
+		let entries = self.log_entry(branch, name)?;
 		Ok(
 			entries
 				.into_iter()

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, str::FromStr as _};
 
 use clap::{Parser, Subcommand};
-use password::{AccountName, Item, PijulStore, ShareTicket, StoreBackend, Versioned, models::{AccountStatus, OnlineAccount, SocialSecurity}, p2p::{IrohSyncHandle, decode_store, encode_store}};
+use password::{AccountName, Item, PijulStore, ShareTicket, StoreBackend, VersionedEntry, models::{AccountStatus, OnlineAccount, SocialSecurity}, p2p::{IrohSyncHandle, decode_store, encode_store}};
 
 /// A type-safe, Pijul-versioned, Iroh P2P credential store.
 #[derive(Parser)]
@@ -181,8 +181,7 @@ async fn main() -> anyhow::Result<()> {
 				}
 			};
 
-			store.insert(branch, account_name.clone(), item)?;
-			let _ = store.record_entry(branch, &account_name, &message);
+			store.insert(branch, account_name.clone(), item, &message)?;
 			println!("Added '{name}' to branch '{branch}'");
 		}
 
@@ -202,9 +201,8 @@ async fn main() -> anyhow::Result<()> {
 
 		Cmd::Remove { name, message } => {
 			let account_name = AccountName::new(&name)?;
-			let removed = store.remove(branch, &account_name)?;
+			let removed = store.remove(branch, &account_name, &message)?;
 			if removed {
-				let _ = store.record_entry(branch, &account_name, &message);
 				println!("Removed '{name}' from branch '{branch}'");
 			} else {
 				eprintln!("No entry '{name}' found on branch '{branch}'");
@@ -227,7 +225,7 @@ async fn main() -> anyhow::Result<()> {
 				Some(ref n) => Some(AccountName::new(n)?),
 				None => None,
 			};
-			let entries = store.log(branch, filter.as_ref())?;
+			let entries = store.log_impl(branch, filter.as_ref())?;
 			if entries.is_empty() {
 				println!("(no history on branch '{branch}')");
 			}
@@ -243,7 +241,7 @@ async fn main() -> anyhow::Result<()> {
 			let hash = pijul_at_core::Hash::from_base32(at.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {at}"))?;
 
-			match store.show_entry_at(branch, &account_name, &hash)? {
+			match store.entry(branch, account_name).snapshot_at(&hash)? {
 				Some(item) => println!("{}", toml::to_string_pretty(&item)?),
 				None => eprintln!("Entry '{name}' not found at patch {at}"),
 			}
@@ -255,7 +253,7 @@ async fn main() -> anyhow::Result<()> {
 			let hash = pijul_at_core::Hash::from_base32(to.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {to}"))?;
 
-			store.revert_entry(branch, &account_name, &hash)?;
+			store.entry(branch, account_name).revert_to(&hash)?;
 			println!("Reverted '{name}' to {to} on branch '{branch}'");
 		}
 
@@ -272,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
 				})
 				.transpose()?;
 
-			let diff = store.diff_entry(branch, &account_name, &from_hash, to_hash.as_ref())?;
+			let diff = store.entry(branch, account_name).diff(&from_hash, to_hash.as_ref())?;
 
 			println!("diff for {}", diff.label);
 			for line in diff.lines {

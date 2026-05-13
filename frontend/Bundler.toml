@@ -1,0 +1,7 @@
+format_version = 3
+
+[apps.frontend]
+identifier = 'com.example.frontend'
+product = 'frontend'
+version = '0.1.0'
+extra_linker_flags = '-L../target/debug -rpath ../target/debug'
