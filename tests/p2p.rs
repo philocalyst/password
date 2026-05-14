@@ -5,11 +5,7 @@
 
 use std::time::Duration;
 
-use password::{
-	AccountName, Item, PasswordStore,
-	models::{AccountStatus, OnlineAccount},
-	p2p::{IrohSyncHandle, decode_store, encode_store},
-};
+use password::{AccountName, Item, PasswordStore, models::{AccountStatus, OnlineAccount}, p2p::{IrohSyncHandle, decode_store, encode_store}};
 use tokio::time::timeout;
 
 fn generate_store(name: &str, num_items: usize) -> PasswordStore {
@@ -17,19 +13,19 @@ fn generate_store(name: &str, num_items: usize) -> PasswordStore {
 	for i in 0..num_items {
 		let n = AccountName::new(format!("{name}-{i}")).unwrap();
 		let item = Item::OnlineAccount(OnlineAccount {
-			username: Some(format!("user-{i}")),
-			password: Some("secret".into()),
-			email: None,
-			phone: None,
-			sign_in_with: None,
-			status: Some(AccountStatus::Active),
-			host_website: None,
-			login_pages: None,
+			username:           Some(format!("user-{i}")),
+			password:           Some("secret".into()),
+			email:              None,
+			phone:              None,
+			sign_in_with:       None,
+			status:             Some(AccountStatus::Active),
+			host_website:       None,
+			login_pages:        None,
 			security_questions: None,
-			date_created: None,
+			date_created:       None,
 			two_factor_enabled: None,
-			associated_items: None,
-			notes: None,
+			associated_items:   None,
+			notes:              None,
 		});
 		s.items.insert(n, item);
 	}

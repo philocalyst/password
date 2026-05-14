@@ -32,37 +32,27 @@ impl AccountName {
 	}
 
 	/// Return the inner string slice.
-	pub fn as_str(&self) -> &str {
-		&self.0
-	}
+	pub fn as_str(&self) -> &str { &self.0 }
 }
 
 impl fmt::Display for AccountName {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(&self.0)
-	}
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }
 
 impl TryFrom<String> for AccountName {
 	type Error = crate::Error;
 
-	fn try_from(s: String) -> crate::Result<Self> {
-		Self::new(s)
-	}
+	fn try_from(s: String) -> crate::Result<Self> { Self::new(s) }
 }
 
 impl TryFrom<&str> for AccountName {
 	type Error = crate::Error;
 
-	fn try_from(s: &str) -> crate::Result<Self> {
-		Self::new(s)
-	}
+	fn try_from(s: &str) -> crate::Result<Self> { Self::new(s) }
 }
 
 impl AsRef<str> for AccountName {
-	fn as_ref(&self) -> &str {
-		&self.0
-	}
+	fn as_ref(&self) -> &str { &self.0 }
 }
 
 /// The sum type over all storable credential kinds.
@@ -93,9 +83,7 @@ pub struct PasswordStore {
 }
 
 impl PasswordStore {
-	pub fn new() -> Self {
-		Self::default()
-	}
+	pub fn new() -> Self { Self::default() }
 }
 
 #[cfg(test)]
@@ -127,7 +115,5 @@ mod tests {
 	}
 
 	#[test]
-	fn item_kind_str() {
-		let _store = PasswordStore::new();
-	}
+	fn item_kind_str() { let _store = PasswordStore::new(); }
 }

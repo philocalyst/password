@@ -9,7 +9,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MasterIdentity {
 	pub identity: PathBuf,
-	pub pubkey: Option<String>,
+	pub pubkey:   Option<String>,
 }
 
 impl MasterIdentity {
@@ -25,10 +25,10 @@ impl MasterIdentity {
 /// Rekey configuration shared by concrete encryption backends.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MasterKeySet {
-	pub master_identities: Vec<MasterIdentity>,
+	pub master_identities:        Vec<MasterIdentity>,
 	pub extra_encryption_pubkeys: Vec<String>,
-	pub primary_identity_pubkey: Option<String>,
-	pub primary_identity_only: bool,
+	pub primary_identity_pubkey:  Option<String>,
+	pub primary_identity_only:    bool,
 }
 
 impl MasterKeySet {
@@ -63,7 +63,8 @@ impl MasterKeySet {
 	}
 }
 
-/// Offline session refresh policy. `None` means operation-count expiry is ignored.
+/// Offline session refresh policy. `None` means operation-count expiry is
+/// ignored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OfflineSessionPolicy {
 	pub max_operations: Option<u64>,
@@ -71,17 +72,15 @@ pub struct OfflineSessionPolicy {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfflineSession {
-	pub subject: String,
-	pub policy_epoch: u64,
+	pub subject:             String,
+	pub policy_epoch:        u64,
 	pub issued_at_operation: u64,
 }
 
 impl OfflineSessionPolicy {
 	pub const DEFAULT_MAX_OPERATIONS: u64 = 10_000;
 
-	pub fn ignored() -> Self {
-		Self { max_operations: None }
-	}
+	pub fn ignored() -> Self { Self { max_operations: None } }
 
 	pub fn issue(
 		&self,
@@ -115,7 +114,5 @@ impl OfflineSessionPolicy {
 }
 
 impl Default for OfflineSessionPolicy {
-	fn default() -> Self {
-		Self { max_operations: Some(Self::DEFAULT_MAX_OPERATIONS) }
-	}
+	fn default() -> Self { Self { max_operations: Some(Self::DEFAULT_MAX_OPERATIONS) } }
 }

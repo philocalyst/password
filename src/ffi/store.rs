@@ -2,21 +2,13 @@ use std::{path::PathBuf, sync::Arc};
 
 use pijul_at_core::Base32;
 
-use super::{
-	error::FfiError,
-	types::{FfiChangeEntry, FfiItem},
-};
-use crate::{
-	AgeScrypt, BranchPath, BranchSegment, PersonalBranch, Unlocked,
-	models::AccountName,
-	store::{DiffResult, StoreBackend, StoreChange, VersionedEntry},
-	versioning::PijulStore,
-};
+use super::{error::FfiError, types::{FfiChangeEntry, FfiItem}};
+use crate::{AgeScrypt, BranchPath, BranchSegment, PersonalBranch, Unlocked, models::AccountName, store::{DiffResult, StoreBackend, StoreChange, VersionedEntry}, versioning::PijulStore};
 
 /// Thread-safe handle to a Pijul-backed credential store on a single branch.
 #[derive(uniffi::Object)]
 pub struct PwdStore {
-	pub(super) inner: std::sync::Mutex<PijulStore<Unlocked<AgeScrypt>>>,
+	pub(super) inner:  std::sync::Mutex<PijulStore<Unlocked<AgeScrypt>>>,
 	pub(super) branch: BranchPath<PersonalBranch>,
 }
 
@@ -38,9 +30,7 @@ impl PwdStore {
 		Ok(Arc::new(Self { inner: std::sync::Mutex::new(store), branch }))
 	}
 
-	pub fn branch(&self) -> String {
-		self.branch.to_string()
-	}
+	pub fn branch(&self) -> String { self.branch.to_string() }
 
 	pub fn store_dir(&self) -> String {
 		self.inner.lock().unwrap().store_dir.to_string_lossy().into_owned()

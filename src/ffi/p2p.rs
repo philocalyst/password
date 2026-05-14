@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use super::{error::FfiError, store::PwdStore};
-use crate::{
-	p2p::{IrohSyncHandle, decode_store, encode_store},
-	store::{ShareTicket, StoreBackend},
-};
+use crate::{p2p::{IrohSyncHandle, decode_store, encode_store}, store::{ShareTicket, StoreBackend}};
 
 /// Synchronous handle to the Iroh P2P stack.
 ///
@@ -13,7 +10,7 @@ use crate::{
 #[derive(uniffi::Object)]
 pub struct P2PHandle {
 	inner: IrohSyncHandle,
-	rt: tokio::runtime::Runtime,
+	rt:    tokio::runtime::Runtime,
 }
 
 #[uniffi::export]
@@ -61,7 +58,5 @@ impl P2PHandle {
 	}
 
 	/// Returns `true` if the Iroh node is running.
-	pub fn is_active(&self) -> bool {
-		self.rt.block_on(self.inner.is_active())
-	}
+	pub fn is_active(&self) -> bool { self.rt.block_on(self.inner.is_active()) }
 }

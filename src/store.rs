@@ -1,10 +1,6 @@
 use pijul_at_core::Hash;
 
-use crate::{
-	access_control::{BranchKind, BranchPath},
-	models::{AccountName, Item, PasswordStore},
-	versioning::ChangeEntry,
-};
+use crate::{access_control::{BranchKind, BranchPath}, models::{AccountName, Item, PasswordStore}, versioning::ChangeEntry};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StoreChange {
@@ -29,9 +25,7 @@ impl StoreChange {
 		Self::UpdateEntry { name, fields: fields.into_iter().map(Into::into).collect() }
 	}
 
-	pub fn remove_entry(name: AccountName) -> Self {
-		Self::RemoveEntry { name }
-	}
+	pub fn remove_entry(name: AccountName) -> Self { Self::RemoveEntry { name } }
 
 	pub fn rekey_store(entries: impl IntoIterator<Item = AccountName>) -> Self {
 		Self::RekeyStore { entries: entries.into_iter().collect() }
@@ -80,7 +74,7 @@ pub enum DiffOp {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct DiffLine {
-	pub op: DiffOp,
+	pub op:      DiffOp,
 	pub content: String,
 }
 
@@ -174,28 +168,20 @@ pub trait VersionedEntry {
 pub struct StorePayload(pub Vec<u8>);
 
 impl StorePayload {
-	pub fn into_inner(self) -> Vec<u8> {
-		self.0
-	}
+	pub fn into_inner(self) -> Vec<u8> { self.0 }
 
-	pub fn as_bytes(&self) -> &[u8] {
-		&self.0
-	}
+	pub fn as_bytes(&self) -> &[u8] { &self.0 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShareTicket(pub String);
 
 impl ShareTicket {
-	pub fn as_str(&self) -> &str {
-		&self.0
-	}
+	pub fn as_str(&self) -> &str { &self.0 }
 }
 
 impl std::fmt::Display for ShareTicket {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.write_str(&self.0)
-	}
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
 }
 
 impl std::str::FromStr for ShareTicket {

@@ -53,9 +53,7 @@ impl EncryptionMethod for AgeScrypt {
 		Ok(decrypted)
 	}
 
-	fn file_extension(&self) -> &'static str {
-		"toml.age"
-	}
+	fn file_extension(&self) -> &'static str { "toml.age" }
 }
 
 /// Marker state for a store whose on-disk contents remain encrypted.
@@ -69,7 +67,5 @@ pub struct Unlocked<M: EncryptionMethod> {
 }
 
 impl<M: EncryptionMethod> Unlocked<M> {
-	pub(crate) fn new(method: M) -> Self {
-		Self { method }
-	}
+	pub(crate) fn new(method: M) -> Self { Self { method } }
 }

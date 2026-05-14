@@ -4,31 +4,19 @@ use anyhow::Result as AResult;
 use futures_lite::StreamExt;
 use iroh::{Endpoint, endpoint::presets, protocol::Router};
 use iroh_blobs::{ALPN as BLOBS_ALPN, BlobsProtocol, store::mem::MemStore};
-use iroh_docs::{
-	ALPN as DOCS_ALPN, DocTicket,
-	api::{
-		Doc,
-		protocol::{AddrInfoOptions, ShareMode},
-	},
-	engine::LiveEvent,
-	protocol::Docs,
-	store::Query,
-};
+use iroh_docs::{ALPN as DOCS_ALPN, DocTicket, api::{Doc, protocol::{AddrInfoOptions, ShareMode}}, engine::LiveEvent, protocol::Docs, store::Query};
 use iroh_gossip::{ALPN as GOSSIP_ALPN, net::Gossip};
 use tokio::sync::Mutex;
 
-use crate::{
-	Error as PwdError, Result as PwdResult,
-	store::{ShareTicket, StorePayload},
-};
+use crate::{Error as PwdError, Result as PwdResult, store::{ShareTicket, StorePayload}};
 
 /// The document key under which the full store payload is stored.
 const PAYLOAD_KEY: &[u8] = b"store_payload";
 
 struct NodeHandles {
 	router: Router,
-	blobs: MemStore,
-	docs: Docs,
+	blobs:  MemStore,
+	docs:   Docs,
 }
 
 pub struct IrohSync {
@@ -57,9 +45,7 @@ impl IrohSync {
 		self.handles.as_ref().ok_or_else(|| anyhow::anyhow!("iroh node not running"))
 	}
 
-	fn docs(&self) -> AResult<&Docs> {
-		Ok(&self.handles()?.docs)
-	}
+	fn docs(&self) -> AResult<&Docs> { Ok(&self.handles()?.docs) }
 
 	/// Publish `payload` into a new iroh-docs document and return a
 	/// [`ShareTicket`] that the receiver can use to import it.
@@ -142,9 +128,7 @@ pub struct IrohSyncHandle {
 }
 
 impl IrohSyncHandle {
-	pub fn new() -> Self {
-		Self { inner: Arc::new(Mutex::new(None)) }
-	}
+	pub fn new() -> Self { Self { inner: Arc::new(Mutex::new(None)) } }
 
 	/// Boot the iroh node (idempotent — harmless to call multiple times).
 	pub async fn init(&self) -> PwdResult<()> {
@@ -179,9 +163,7 @@ impl IrohSyncHandle {
 	}
 
 	/// Returns `true` when the iroh node is currently running.
-	pub async fn is_active(&self) -> bool {
-		self.inner.lock().await.is_some()
-	}
+	pub async fn is_active(&self) -> bool { self.inner.lock().await.is_some() }
 }
 
 /// Serialise a [`crate::models::PasswordStore`] into a [`StorePayload`].

@@ -37,31 +37,23 @@ impl BranchSegment {
 		Ok(Self(raw))
 	}
 
-	pub fn as_str(&self) -> &str {
-		&self.0
-	}
+	pub fn as_str(&self) -> &str { &self.0 }
 }
 
 impl TryFrom<&str> for BranchSegment {
 	type Error = Error;
 
-	fn try_from(value: &str) -> Result<Self> {
-		Self::new(value)
-	}
+	fn try_from(value: &str) -> Result<Self> { Self::new(value) }
 }
 
 impl TryFrom<String> for BranchSegment {
 	type Error = Error;
 
-	fn try_from(value: String) -> Result<Self> {
-		Self::new(value)
-	}
+	fn try_from(value: String) -> Result<Self> { Self::new(value) }
 }
 
 impl std::fmt::Display for BranchSegment {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.write_str(&self.0)
-	}
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }
 }
 
 impl<'de> Deserialize<'de> for BranchSegment {
@@ -77,14 +69,12 @@ impl<'de> Deserialize<'de> for BranchSegment {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BranchPath<K: BranchKind> {
 	canonical: String,
-	segments: Vec<BranchSegment>,
-	_kind: PhantomData<K>,
+	segments:  Vec<BranchSegment>,
+	_kind:     PhantomData<K>,
 }
 
 impl BranchPath<PersonalBranch> {
-	pub fn personal(name: BranchSegment) -> Self {
-		Self::from_segments(vec![name])
-	}
+	pub fn personal(name: BranchSegment) -> Self { Self::from_segments(vec![name]) }
 }
 
 impl BranchPath<GroupBranch> {
@@ -112,17 +102,11 @@ impl<K: BranchKind> BranchPath<K> {
 		Self { canonical: format!("{}:{}", K::PREFIX, path), segments, _kind: PhantomData }
 	}
 
-	pub fn as_str(&self) -> &str {
-		&self.canonical
-	}
+	pub fn as_str(&self) -> &str { &self.canonical }
 
-	pub fn segments(&self) -> &[BranchSegment] {
-		&self.segments
-	}
+	pub fn segments(&self) -> &[BranchSegment] { &self.segments }
 
-	pub fn storage_component(&self) -> String {
-		branch_storage_component(self)
-	}
+	pub fn storage_component(&self) -> String { branch_storage_component(self) }
 }
 
 impl<K: BranchKind> std::fmt::Display for BranchPath<K> {
@@ -178,9 +162,7 @@ impl PrincipalId {
 		Ok(Self(raw))
 	}
 
-	pub fn as_str(&self) -> &str {
-		&self.0
-	}
+	pub fn as_str(&self) -> &str { &self.0 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -189,21 +171,17 @@ pub struct BranchTarget<K: BranchKind> {
 }
 
 impl<K: BranchKind> BranchTarget<K> {
-	pub fn new(branch: BranchPath<K>) -> Self {
-		Self { branch }
-	}
+	pub fn new(branch: BranchPath<K>) -> Self { Self { branch } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemTarget<K: BranchKind> {
 	pub branch: BranchPath<K>,
-	pub name: AccountName,
+	pub name:   AccountName,
 }
 
 impl<K: BranchKind> ItemTarget<K> {
-	pub fn new(branch: BranchPath<K>, name: AccountName) -> Self {
-		Self { branch, name }
-	}
+	pub fn new(branch: BranchPath<K>, name: AccountName) -> Self { Self { branch, name } }
 }
 
 pub trait AccessLevel: Clone + std::fmt::Debug + Send + Sync + 'static {
@@ -246,40 +224,28 @@ impl GrantsAdmin for AdminAccess {}
 #[derive(Debug, Clone)]
 pub struct Authorized<'a, T, L: AccessLevel> {
 	principal: PrincipalId,
-	target: T,
-	granted: KeyhiveAccess,
-	_scope: PhantomData<&'a ()>,
-	_level: PhantomData<L>,
+	target:    T,
+	granted:   KeyhiveAccess,
+	_scope:    PhantomData<&'a ()>,
+	_level:    PhantomData<L>,
 }
 
 impl<T, L: AccessLevel> Authorized<'_, T, L> {
-	pub fn principal(&self) -> &PrincipalId {
-		&self.principal
-	}
+	pub fn principal(&self) -> &PrincipalId { &self.principal }
 
-	pub fn target(&self) -> &T {
-		&self.target
-	}
+	pub fn target(&self) -> &T { &self.target }
 
-	pub fn granted(&self) -> KeyhiveAccess {
-		self.granted
-	}
+	pub fn granted(&self) -> KeyhiveAccess { self.granted }
 }
 
 impl<K: BranchKind, L: AccessLevel> Authorized<'_, BranchTarget<K>, L> {
-	pub fn branch(&self) -> &BranchPath<K> {
-		&self.target.branch
-	}
+	pub fn branch(&self) -> &BranchPath<K> { &self.target.branch }
 }
 
 impl<K: BranchKind, L: AccessLevel> Authorized<'_, ItemTarget<K>, L> {
-	pub fn branch(&self) -> &BranchPath<K> {
-		&self.target.branch
-	}
+	pub fn branch(&self) -> &BranchPath<K> { &self.target.branch }
 
-	pub fn name(&self) -> &AccountName {
-		&self.target.name
-	}
+	pub fn name(&self) -> &AccountName { &self.target.name }
 }
 
 pub trait AccessControl {
@@ -299,14 +265,12 @@ pub trait AccessControl {
 #[derive(Debug, Default, Clone)]
 pub struct InMemoryAccessControl {
 	branch_grants: HashMap<(String, String), KeyhiveAccess>,
-	item_grants: HashMap<(String, String, AccountName), KeyhiveAccess>,
-	policy_epoch: u64,
+	item_grants:   HashMap<(String, String, AccountName), KeyhiveAccess>,
+	policy_epoch:  u64,
 }
 
 impl InMemoryAccessControl {
-	pub fn policy_epoch(&self) -> u64 {
-		self.policy_epoch
-	}
+	pub fn policy_epoch(&self) -> u64 { self.policy_epoch }
 
 	pub fn grant_branch<K: BranchKind>(
 		&mut self,

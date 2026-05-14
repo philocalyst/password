@@ -1,12 +1,7 @@
 use std::{path::PathBuf, str::FromStr as _};
 
 use clap::{Parser, Subcommand};
-use password::{
-	AccountName, AgeScrypt, BranchPath, BranchSegment, Item, PersonalBranch, PijulStore, ShareTicket,
-	StoreBackend, StoreChange, VersionedEntry,
-	models::{AccountStatus, OnlineAccount, SocialSecurity},
-	p2p::{IrohSyncHandle, decode_store, encode_store},
-};
+use password::{AccountName, AgeScrypt, BranchPath, BranchSegment, Item, PersonalBranch, PijulStore, ShareTicket, StoreBackend, StoreChange, VersionedEntry, models::{AccountStatus, OnlineAccount, SocialSecurity}, p2p::{IrohSyncHandle, decode_store, encode_store}};
 
 /// A type-safe, Pijul-versioned, Iroh P2P credential store.
 #[derive(Parser)]
@@ -175,11 +170,11 @@ async fn main() -> anyhow::Result<()> {
 			let account_name = AccountName::new(&name)?;
 			let item = match r#type.as_str() {
 				"ssn" => Item::SocialSecurity(SocialSecurity {
-					account_number: name.clone().parse().unwrap_or_else(|_| unimplemented!()),
-					legal_name: None,
-					issuance_date: None,
+					account_number:   name.clone().parse().unwrap_or_else(|_| unimplemented!()),
+					legal_name:       None,
+					issuance_date:    None,
 					country_of_issue: None,
-					notes: None,
+					notes:            None,
 				}),
 				_ => {
 					let host_website = website.as_deref().map(|u| u.parse::<url::Url>()).transpose()?;

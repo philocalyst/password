@@ -4,13 +4,7 @@ use super::error::FfiError;
 /// All domain-typed fields (URL, email, phone, date, country) are exposed as
 /// plain Strings.  Validation of inbound data happens inside `PwdStore` before
 /// it reaches the internal `OnlineAccount`/`SocialSecurity` types.
-use crate::{
-	models::{
-		Item, OnlineAccount, OnlineAccountSecurityQuestionsItem, OnlineAccountSignInWithItem,
-		OnlineAccountStatus, SocialSecurity,
-	},
-	versioning::ChangeEntry,
-};
+use crate::{models::{Item, OnlineAccount, OnlineAccountSecurityQuestionsItem, OnlineAccountSignInWithItem, OnlineAccountStatus, SocialSecurity}, versioning::ChangeEntry};
 
 // ── item types
 // ────────────────────────────────────────────────────────────────
@@ -28,44 +22,44 @@ pub enum FfiItem {
 /// "Active"/"Deactivated"/"Suspended" status, "Google"/"Apple"/… provider).
 #[derive(Debug, Clone, Default, uniffi::Record)]
 pub struct FfiOnlineAccount {
-	pub username: Option<String>,
-	pub password: Option<String>,
-	pub email: Option<String>,
-	pub phone: Option<String>,
-	pub sign_in_with: Option<Vec<String>>,
-	pub status: Option<String>,
-	pub host_website: Option<String>,
-	pub login_pages: Option<Vec<String>>,
+	pub username:           Option<String>,
+	pub password:           Option<String>,
+	pub email:              Option<String>,
+	pub phone:              Option<String>,
+	pub sign_in_with:       Option<Vec<String>>,
+	pub status:             Option<String>,
+	pub host_website:       Option<String>,
+	pub login_pages:        Option<Vec<String>>,
 	pub security_questions: Option<Vec<FfiSecurityQuestion>>,
 	pub two_factor_enabled: Option<bool>,
-	pub associated_items: Option<Vec<String>>,
-	pub date_created: Option<String>,
-	pub notes: Option<String>,
+	pub associated_items:   Option<Vec<String>>,
+	pub date_created:       Option<String>,
+	pub notes:              Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct FfiSecurityQuestion {
 	pub question: String,
-	pub answer: String,
+	pub answer:   String,
 }
 
 /// String-field mirror of [`SocialSecurity`].
 #[derive(Debug, Clone, Default, uniffi::Record)]
 pub struct FfiSocialSecurity {
-	pub account_number: String,
-	pub legal_name: Option<String>,
-	pub issuance_date: Option<String>,
+	pub account_number:   String,
+	pub legal_name:       Option<String>,
+	pub issuance_date:    Option<String>,
 	pub country_of_issue: Option<String>,
-	pub notes: Option<String>,
+	pub notes:            Option<String>,
 }
 
 /// String-field mirror of [`ChangeEntry`].
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct FfiChangeEntry {
-	pub hash: String,
-	pub message: String,
-	pub timestamp: String,
-	pub author: String,
+	pub hash:       String,
+	pub message:    String,
+	pub timestamp:  String,
+	pub author:     String,
 	pub entry_name: Option<String>,
 }
 
@@ -84,26 +78,26 @@ impl From<Item> for FfiItem {
 impl From<OnlineAccount> for FfiOnlineAccount {
 	fn from(a: OnlineAccount) -> Self {
 		Self {
-			username: a.username,
-			password: a.password,
-			email: a.email.as_ref().map(|e| e.to_string()),
-			phone: a
+			username:           a.username,
+			password:           a.password,
+			email:              a.email.as_ref().map(|e| e.to_string()),
+			phone:              a
 				.phone
 				.as_ref()
 				.map(|p| phonenumber::format(p).mode(phonenumber::Mode::E164).to_string()),
-			sign_in_with: a.sign_in_with.map(|v| v.into_iter().map(|s| s.to_string()).collect()),
-			status: a.status.as_ref().map(|s| s.to_string()),
-			host_website: a.host_website.as_ref().map(|u| u.to_string()),
-			login_pages: a.login_pages.map(|v| v.into_iter().map(|u| u.to_string()).collect()),
+			sign_in_with:       a.sign_in_with.map(|v| v.into_iter().map(|s| s.to_string()).collect()),
+			status:             a.status.as_ref().map(|s| s.to_string()),
+			host_website:       a.host_website.as_ref().map(|u| u.to_string()),
+			login_pages:        a.login_pages.map(|v| v.into_iter().map(|u| u.to_string()).collect()),
 			security_questions: a.security_questions.map(|v| {
 				v.into_iter()
 					.map(|q| FfiSecurityQuestion { question: q.question, answer: q.answer })
 					.collect()
 			}),
 			two_factor_enabled: a.two_factor_enabled,
-			associated_items: a.associated_items,
-			date_created: a.date_created.as_ref().map(|d| d.to_string()),
-			notes: a.notes,
+			associated_items:   a.associated_items,
+			date_created:       a.date_created.as_ref().map(|d| d.to_string()),
+			notes:              a.notes,
 		}
 	}
 }
@@ -111,11 +105,11 @@ impl From<OnlineAccount> for FfiOnlineAccount {
 impl From<SocialSecurity> for FfiSocialSecurity {
 	fn from(s: SocialSecurity) -> Self {
 		Self {
-			account_number: s.account_number.to_string(),
-			legal_name: s.legal_name,
-			issuance_date: s.issuance_date.as_ref().map(|d| d.to_string()),
+			account_number:   s.account_number.to_string(),
+			legal_name:       s.legal_name,
+			issuance_date:    s.issuance_date.as_ref().map(|d| d.to_string()),
 			country_of_issue: s.country_of_issue.as_ref().map(country_alpha2),
-			notes: s.notes,
+			notes:            s.notes,
 		}
 	}
 }
@@ -123,10 +117,10 @@ impl From<SocialSecurity> for FfiSocialSecurity {
 impl From<ChangeEntry> for FfiChangeEntry {
 	fn from(e: ChangeEntry) -> Self {
 		Self {
-			hash: e.hash,
-			message: e.message,
-			timestamp: e.timestamp.to_string(),
-			author: e.author,
+			hash:       e.hash,
+			message:    e.message,
+			timestamp:  e.timestamp.to_string(),
+			author:     e.author,
 			entry_name: e.entry_name.map(|n| n.to_string()),
 		}
 	}
@@ -220,7 +214,7 @@ impl TryFrom<FfiOnlineAccount> for OnlineAccount {
 					.map(|q| {
 						Ok::<_, FfiError>(OnlineAccountSecurityQuestionsItem {
 							question: q.question,
-							answer: q.answer,
+							answer:   q.answer,
 						})
 					})
 					.collect::<Result<Vec<_>, _>>()

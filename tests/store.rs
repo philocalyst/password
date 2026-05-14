@@ -1,50 +1,39 @@
 //! Integration tests for `StoreBackend` + `Versioned` via `PijulStore`.
 //! Testing complex versioning, branching, and reverting scenarios.
 
-use password::{
-	AccessControl, AccountName, AgeScrypt, BranchPath, BranchSegment, EditAccess, EncryptionMethod,
-	Error, GroupBranch, InMemoryAccessControl, Item, ItemTarget, PersonalBranch, PijulStore,
-	PrincipalId, ReadAccess, StoreBackend, VersionedEntry, branch_storage_component,
-	models::{AccountStatus, OnlineAccount},
-};
+use password::{AccessControl, AccountName, AgeScrypt, BranchPath, BranchSegment, EditAccess, EncryptionMethod, Error, GroupBranch, InMemoryAccessControl, Item, ItemTarget, PersonalBranch, PijulStore, PrincipalId, ReadAccess, StoreBackend, VersionedEntry, branch_storage_component, models::{AccountStatus, OnlineAccount}};
 
 fn sample_account(pass: &str) -> Item {
 	Item::OnlineAccount(OnlineAccount {
-		username: Some("alice".into()),
-		password: Some(pass.into()),
-		email: None,
-		phone: None,
-		sign_in_with: None,
-		status: Some(AccountStatus::Active),
-		host_website: None,
-		login_pages: None,
+		username:           Some("alice".into()),
+		password:           Some(pass.into()),
+		email:              None,
+		phone:              None,
+		sign_in_with:       None,
+		status:             Some(AccountStatus::Active),
+		host_website:       None,
+		login_pages:        None,
 		security_questions: None,
-		date_created: None,
+		date_created:       None,
 		two_factor_enabled: Some(false),
-		associated_items: None,
-		notes: None,
+		associated_items:   None,
+		notes:              None,
 	})
 }
 
-fn name(s: &str) -> AccountName {
-	AccountName::new(s).unwrap()
-}
+fn name(s: &str) -> AccountName { AccountName::new(s).unwrap() }
 
 fn store() -> password::versioning::PijulStore<password::Unlocked<AgeScrypt>> {
 	PijulStore::ephemeral().unwrap().unlock_with(AgeScrypt::new("test-passphrase").unwrap())
 }
 
-fn branch_segment(raw: &str) -> BranchSegment {
-	BranchSegment::new(raw).unwrap()
-}
+fn branch_segment(raw: &str) -> BranchSegment { BranchSegment::new(raw).unwrap() }
 
 fn personal_branch(raw: &str) -> BranchPath<PersonalBranch> {
 	BranchPath::personal(branch_segment(raw))
 }
 
-fn main_branch() -> BranchPath<PersonalBranch> {
-	personal_branch("main")
-}
+fn main_branch() -> BranchPath<PersonalBranch> { personal_branch("main") }
 
 fn group_branch<const N: usize>(segments: [&str; N]) -> BranchPath<GroupBranch> {
 	BranchPath::<GroupBranch>::group(segments.into_iter().map(branch_segment)).unwrap()
@@ -235,9 +224,7 @@ fn adversarial_failed_rekey_leaves_existing_ciphertext_readable() {
 			Err(Error::Decryption("not used in this test".into()))
 		}
 
-		fn file_extension(&self) -> &'static str {
-			"toml.age"
-		}
+		fn file_extension(&self) -> &'static str { "toml.age" }
 	}
 
 	let tmp = tempfile::tempdir().unwrap();
@@ -345,12 +332,11 @@ fn adversarial_branch_path_traversal_and_empty_segments_are_rejected() {
 	for bad in ["../prod", "prod/../root", "prod//root", "prod/./root", "prod\\root", ""] {
 		assert!(BranchSegment::new(bad).is_err(), "{bad:?} should be rejected");
 	}
-	for bad_segments in [
-		vec!["prod", "..", "root"],
-		vec!["prod", "", "root"],
-		vec!["prod", ".", "root"],
-		vec!["prod", "root/escape"],
-	] {
+	for bad_segments in
+		[vec!["prod", "..", "root"], vec!["prod", "", "root"], vec!["prod", ".", "root"], vec![
+			"prod",
+			"root/escape",
+		]] {
 		assert!(
 			bad_segments.iter().copied().map(BranchSegment::new).any(|segment| segment.is_err()),
 			"{bad_segments:?} should be rejected"
