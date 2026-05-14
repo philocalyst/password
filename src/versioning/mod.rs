@@ -8,7 +8,7 @@ use pijul_at_repository::Repository;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
-use crate::{Error, Result, models::{AccountName, Item, PasswordStore}, store::{DiffLine, DiffOp, DiffResult, StoreBackend, VersionedEntry}};
+use crate::{Error, Result, access_control::{self, Authorized, BranchKind, BranchPath, BranchTarget, GrantsEdit, GrantsRead, ItemTarget}, encryption::{EncryptionMethod, Locked, Unlocked}, models::{AccountName, Item, PasswordStore}, store::{DiffLine, DiffOp, DiffResult, StoreBackend, StoreChange, VersionedEntry}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeEntry {
@@ -19,13 +19,14 @@ pub struct ChangeEntry {
 	pub entry_name: Option<AccountName>,
 }
 
-pub struct PijulStore {
+pub struct PijulStore<State = Locked> {
 	pub store_dir: PathBuf,
 	repo:          Repository,
 	_temp:         Option<TempDir>,
+	state:         State,
 }
 
-impl PijulStore {
+impl PijulStore<Locked> {
 	pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
 		let store_dir: PathBuf = path.into();
 		std::fs::create_dir_all(&store_dir)?;
@@ -47,7 +48,7 @@ impl PijulStore {
 			repo
 		};
 
-		Ok(Self { store_dir, repo, _temp: None })
+		Ok(Self { store_dir, repo, _temp: None, state: Locked })
 	}
 
 	pub fn ephemeral() -> Result<Self> {
@@ -57,17 +58,111 @@ impl PijulStore {
 		Ok(store)
 	}
 
-	fn branch_dir(&self, branch: &str) -> PathBuf { self.store_dir.join("branches").join(branch) }
+	pub fn unlock_with<M: EncryptionMethod>(self, method: M) -> PijulStore<Unlocked<M>> {
+		PijulStore {
+			store_dir: self.store_dir,
+			repo:      self.repo,
+			_temp:     self._temp,
+			state:     Unlocked::new(method),
+		}
+	}
+}
 
+impl<State> PijulStore<State> {
+	fn branch_dir(&self, branch: &str) -> PathBuf {
+		self.store_dir.join("branches").join(access_control::branch_storage_component_raw(branch))
+	}
+
+	pub fn init<K: BranchKind>(&self, branch: &BranchPath<K>) -> Result<()> {
+		self.init_raw(branch.as_str())
+	}
+
+	fn init_raw(&self, branch: &str) -> Result<()> {
+		std::fs::create_dir_all(self.branch_dir(branch))?;
+		let txn = self.repo.pristine.arc_txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
+		{
+			let mut txn_w = txn.write();
+			Self::get_or_create_channel(&mut *txn_w, branch)?;
+		}
+		txn.commit().map_err(|e| Error::Pijul(e.to_string()))?;
+		Ok(())
+	}
+
+	fn get_or_create_channel<T: pijul_at_core::MutTxnTExt>(
+		txn: &mut T,
+		name: &str,
+	) -> Result<ChannelRef<T>> {
+		txn.open_or_create_channel(name).map_err(|e| Error::Pijul(e.to_string()))
+	}
+}
+
+impl<M: EncryptionMethod> PijulStore<Unlocked<M>> {
 	fn entry_path(&self, branch: &str, name: &AccountName) -> PathBuf {
-		self.branch_dir(branch).join(format!("{}.toml", name.as_str()))
+		self.branch_dir(branch).join(format!(
+			"{}.{}",
+			name.as_str(),
+			self.state.method.file_extension()
+		))
+	}
+
+	pub fn list_authorized<K: BranchKind, L: GrantsRead>(
+		&self,
+		branch: &Authorized<'_, BranchTarget<K>, L>,
+	) -> Result<Vec<AccountName>> {
+		self.list(branch.branch())
+	}
+
+	pub fn get_authorized<K: BranchKind, L: GrantsRead>(
+		&self,
+		item: &Authorized<'_, ItemTarget<K>, L>,
+	) -> Result<Option<Item>> {
+		self.get(item.branch(), item.name())
+	}
+
+	pub fn insert_authorized<K: BranchKind, L: GrantsEdit>(
+		&self,
+		branch: &Authorized<'_, BranchTarget<K>, L>,
+		name: AccountName,
+		item: Item,
+		change: StoreChange,
+	) -> Result<()> {
+		self.insert(branch.branch(), name, item, change)
+	}
+
+	pub fn update_authorized<K: BranchKind, L: GrantsEdit>(
+		&self,
+		item_auth: &Authorized<'_, ItemTarget<K>, L>,
+		item: Item,
+		change: StoreChange,
+	) -> Result<()> {
+		self.update(item_auth.branch(), item_auth.name(), item, change)
+	}
+
+	pub fn remove_authorized<K: BranchKind, L: GrantsEdit>(
+		&self,
+		item_auth: &Authorized<'_, ItemTarget<K>, L>,
+		change: StoreChange,
+	) -> Result<bool> {
+		self.remove(item_auth.branch(), item_auth.name(), change)
 	}
 
 	fn write_entry(&self, branch: &str, name: &AccountName, item: &Item) -> Result<()> {
 		let toml = toml::to_string_pretty(item)?;
-		std::fs::create_dir_all(self.branch_dir(branch))?;
-		std::fs::write(self.entry_path(branch, name), toml)?;
+		let encrypted = self.state.method.encrypt(toml.as_bytes())?;
+		let path = self.entry_path(branch, name);
+		let dir = self.branch_dir(branch);
+		std::fs::create_dir_all(&dir)?;
+		let mut tmp = tempfile::NamedTempFile::new_in(&dir)?;
+		std::io::Write::write_all(&mut tmp, &encrypted)?;
+		tmp.persist(&path).map_err(|e| e.error)?;
 		Ok(())
+	}
+
+	fn read_entry(&self, path: &std::path::Path) -> Result<Item> {
+		let encrypted = std::fs::read(path)?;
+		let plaintext = self.state.method.decrypt(&encrypted)?;
+		let content = std::str::from_utf8(&plaintext)?;
+		Ok(toml::from_str(content)?)
 	}
 
 	fn remove_entry_file(&self, branch: &str, name: &AccountName) -> Result<bool> {
@@ -80,15 +175,30 @@ impl PijulStore {
 		}
 	}
 
-	fn get_or_create_channel<T: pijul_at_core::MutTxnTExt>(
-		txn: &mut T,
-		name: &str,
-	) -> Result<ChannelRef<T>> {
-		txn.open_or_create_channel(name).map_err(|e| Error::Pijul(e.to_string()))
+	pub fn rekey_with<K: BranchKind, N: EncryptionMethod>(
+		self,
+		branch: &BranchPath<K>,
+		new_method: N,
+		change: StoreChange,
+	) -> Result<PijulStore<Unlocked<N>>> {
+		let branch_name = branch.as_str();
+		let current = self.load(branch)?;
+		let store = PijulStore {
+			store_dir: self.store_dir,
+			repo:      self.repo,
+			_temp:     self._temp,
+			state:     Unlocked::new(new_method),
+		};
+		store.save(branch, &current)?;
+		for name in current.items.keys() {
+			let msg = change.message();
+			let _ = store.pijul_record(branch_name, name, &msg, true);
+		}
+		Ok(store)
 	}
 
 	fn pijul_record(&self, branch: &str, name: &AccountName, msg: &str, added: bool) -> Result<Hash> {
-		self.init(branch)?;
+		self.init_raw(branch)?;
 		let txn = self.repo.pristine.arc_txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
 
 		let channel = {
@@ -96,7 +206,13 @@ impl PijulStore {
 			Self::get_or_create_channel(&mut *txn_w, branch)?
 		};
 
-		let rel_path = format!("branches/{}/{}.toml", branch, name.as_str());
+		let branch_component = access_control::branch_storage_component_raw(branch);
+		let rel_path = format!(
+			"branches/{}/{}.{}",
+			branch_component,
+			name.as_str(),
+			self.state.method.file_extension()
+		);
 		{
 			let mut txn_w = txn.write();
 			if added {
@@ -186,7 +302,13 @@ impl PijulStore {
 		name: &AccountName,
 		target: &Hash,
 	) -> Result<Vec<Hash>> {
-		let rel_path = format!("branches/{}/{}.toml", branch, name.as_str());
+		let branch_component = access_control::branch_storage_component_raw(branch);
+		let rel_path = format!(
+			"branches/{}/{}.{}",
+			branch_component,
+			name.as_str(),
+			self.state.method.file_extension()
+		);
 		let g = txn.read();
 		let mut rev_iter =
 			g.reverse_log(&channel.read(), None).map_err(|e| Error::Pijul(e.to_string()))?;
@@ -221,91 +343,120 @@ impl PijulStore {
 	}
 }
 
-impl StoreBackend for PijulStore {
+impl<M: EncryptionMethod> StoreBackend for PijulStore<Unlocked<M>> {
 	type Error = Error;
 
-	fn init(&self, branch: &str) -> Result<()> {
-		std::fs::create_dir_all(self.branch_dir(branch))?;
-		let txn = self.repo.pristine.arc_txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
-		{
-			let mut txn_w = txn.write();
-			Self::get_or_create_channel(&mut *txn_w, branch)?;
-		}
-		txn.commit().map_err(|e| Error::Pijul(e.to_string()))?;
-		Ok(())
+	fn init<K: BranchKind>(&self, branch: &BranchPath<K>) -> Result<()> {
+		PijulStore::init(self, branch)
 	}
 
-	fn load(&self, branch: &str) -> Result<PasswordStore> {
+	fn load<K: BranchKind>(&self, branch: &BranchPath<K>) -> Result<PasswordStore> {
 		let mut store = PasswordStore::new();
-		let dir = self.branch_dir(branch);
+		let dir = self.branch_dir(branch.as_str());
 		if !dir.exists() {
 			return Ok(store);
 		}
 		for entry in std::fs::read_dir(dir)? {
 			let entry = entry?;
 			let path = entry.path();
-			if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+			let filename = match path.file_name().and_then(|e| e.to_str()) {
+				Some(filename) => filename,
+				None => continue,
+			};
+			if !filename.ends_with(self.state.method.file_extension()) {
 				continue;
 			}
-			let stem = path.file_stem().unwrap().to_str().unwrap().to_owned();
+			let stem =
+				filename.trim_end_matches(self.state.method.file_extension()).trim_end_matches('.');
 			let name = match AccountName::new(stem) {
 				Ok(n) => n,
 				Err(_) => continue,
 			};
-			let content = std::fs::read_to_string(&path)?;
-			let item: Item = match toml::from_str(&content) {
-				Ok(i) => i,
-				Err(_) => continue,
-			};
+			let item = self.read_entry(&path)?;
 			store.items.insert(name, item);
 		}
 		Ok(store)
 	}
 
-	fn save(&self, branch: &str, store: &PasswordStore) -> Result<()> {
+	fn save<K: BranchKind>(&self, branch: &BranchPath<K>, store: &PasswordStore) -> Result<()> {
 		self.init(branch)?;
 		for (name, item) in &store.items {
-			self.write_entry(branch, name, item)?;
+			self.write_entry(branch.as_str(), name, item)?;
 		}
 		Ok(())
 	}
 
-	fn list(&self, branch: &str) -> Result<Vec<AccountName>> {
+	fn list<K: BranchKind>(&self, branch: &BranchPath<K>) -> Result<Vec<AccountName>> {
 		let mut names: Vec<AccountName> = self.load(branch)?.items.keys().cloned().collect();
 		names.sort();
 		Ok(names)
 	}
 
-	fn get(&self, branch: &str, name: &AccountName) -> Result<Option<Item>> {
+	fn get<K: BranchKind>(&self, branch: &BranchPath<K>, name: &AccountName) -> Result<Option<Item>> {
 		Ok(self.load(branch)?.items.get(name).cloned())
 	}
 
-	fn insert(&self, branch: &str, name: AccountName, item: Item, msg: &str) -> Result<()> {
+	fn insert<K: BranchKind>(
+		&self,
+		branch: &BranchPath<K>,
+		name: AccountName,
+		item: Item,
+		change: StoreChange,
+	) -> Result<()> {
+		validate_change_target(&change, &name)?;
 		if self.get(branch, &name)?.is_some() {
 			return Err(Error::EntryAlreadyExists { name });
 		}
-		self.write_entry(branch, &name, &item)?;
-		let _ = self.pijul_record(branch, &name, msg, true);
+		self.write_entry(branch.as_str(), &name, &item)?;
+		let msg = change.message();
+		let _ = self.pijul_record(branch.as_str(), &name, &msg, true);
 		Ok(())
 	}
 
-	fn update(&self, branch: &str, name: &AccountName, item: Item, msg: &str) -> Result<()> {
+	fn update<K: BranchKind>(
+		&self,
+		branch: &BranchPath<K>,
+		name: &AccountName,
+		item: Item,
+		change: StoreChange,
+	) -> Result<()> {
+		validate_change_target(&change, name)?;
 		if self.get(branch, name)?.is_none() {
 			return Err(Error::EntryNotFound { name: name.clone() });
 		}
-		self.write_entry(branch, name, &item)?;
-		let _ = self.pijul_record(branch, name, msg, true);
+		self.write_entry(branch.as_str(), name, &item)?;
+		let msg = change.message();
+		let _ = self.pijul_record(branch.as_str(), name, &msg, true);
 		Ok(())
 	}
 
-	fn remove(&self, branch: &str, name: &AccountName, msg: &str) -> Result<bool> {
+	fn remove<K: BranchKind>(
+		&self,
+		branch: &BranchPath<K>,
+		name: &AccountName,
+		change: StoreChange,
+	) -> Result<bool> {
+		validate_change_target(&change, name)?;
 		let existed = self.get(branch, name)?.is_some();
-		let removed_file = self.remove_entry_file(branch, name)?;
+		let removed_file = self.remove_entry_file(branch.as_str(), name)?;
 		if existed || removed_file {
-			let _ = self.pijul_record(branch, name, msg, false);
+			let msg = change.message();
+			let _ = self.pijul_record(branch.as_str(), name, &msg, false);
 		}
 		Ok(existed || removed_file)
 	}
+}
+
+fn validate_change_target(change: &StoreChange, name: &AccountName) -> Result<()> {
+	if let Some(change_name) = change.entry_name() {
+		if change_name != name {
+			return Err(Error::Validation {
+				field:  "change.name".into(),
+				reason: format!("change targets {change_name}, but operation targets {name}"),
+			});
+		}
+	}
+	Ok(())
 }
 
 // ── Entry handle
@@ -315,36 +466,42 @@ impl StoreBackend for PijulStore {
 ///
 /// Returned by [`PijulStore::entry`]; provides per-entry version operations
 /// without repeating the branch or name on every call.
-pub struct EntryHandle<'s> {
-	store:  &'s PijulStore,
+pub struct EntryHandle<'s, M: EncryptionMethod> {
+	store:  &'s PijulStore<Unlocked<M>>,
 	branch: String,
 	name:   AccountName,
 }
 
-impl PijulStore {
-	pub fn entry(&self, branch: impl Into<String>, name: AccountName) -> EntryHandle<'_> {
-		EntryHandle { store: self, branch: branch.into(), name }
+impl<M: EncryptionMethod> PijulStore<Unlocked<M>> {
+	pub fn entry<K: BranchKind>(
+		&self,
+		branch: &BranchPath<K>,
+		name: AccountName,
+	) -> EntryHandle<'_, M> {
+		EntryHandle { store: self, branch: branch.as_str().to_owned(), name }
 	}
 }
 
-impl VersionedEntry for EntryHandle<'_> {
+impl<M: EncryptionMethod> VersionedEntry for EntryHandle<'_, M> {
 	type Error = Error;
 
 	fn revert_to(&self, target: &Hash) -> Result<()> {
-		self.store.revert_entry_impl(&self.branch, &self.name, target)
+		self.store.revert_entry_impl_raw(&self.branch, &self.name, target)
 	}
 
-	fn log(&self) -> Result<Vec<ChangeEntry>> { self.store.log_entry(&self.branch, &self.name) }
+	fn log(&self) -> Result<Vec<ChangeEntry>> { self.store.log_entry_raw(&self.branch, &self.name) }
 
 	fn diff(&self, from: &Hash, to: Option<&Hash>) -> Result<DiffResult> {
-		self.store.diff_entry_impl(&self.branch, &self.name, from, to)
+		self.store.diff_entry_impl_raw(&self.branch, &self.name, from, to)
 	}
 
 	fn snapshot_at(&self, at: &Hash) -> Result<Option<Item>> {
-		self.store.snapshot_entry_at(&self.branch, &self.name, at)
+		self.store.snapshot_entry_at_raw(&self.branch, &self.name, at)
 	}
 
-	fn head(&self) -> Result<Option<Hash>> { self.store.head_entry_hash(&self.branch, &self.name) }
+	fn head(&self) -> Result<Option<Hash>> {
+		self.store.head_entry_hash_raw(&self.branch, &self.name)
+	}
 }
 
 struct DiffSink<'a> {
@@ -373,9 +530,9 @@ impl<'a> imara_diff::sink::Sink for DiffSink<'a> {
 	fn finish(self) -> <DiffSink<'a> as imara_diff::sink::Sink>::Out { self.lines }
 }
 
-impl PijulStore {
+impl<M: EncryptionMethod> PijulStore<Unlocked<M>> {
 	/// Revert `name` to the state it had after `target`. Used by `EntryHandle`.
-	pub fn revert_entry_impl(&self, branch: &str, name: &AccountName, target: &Hash) -> Result<()> {
+	fn revert_entry_impl_raw(&self, branch: &str, name: &AccountName, target: &Hash) -> Result<()> {
 		let txn = self.repo.pristine.arc_txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
 		let channel = {
 			let mut txn_w = txn.write();
@@ -412,12 +569,20 @@ impl PijulStore {
 	}
 
 	/// Scoped log for a single entry. Used by `EntryHandle`.
-	pub fn log_entry(&self, branch: &str, name: &AccountName) -> Result<Vec<ChangeEntry>> {
-		self.log_impl(branch, Some(name))
+	fn log_entry_raw(&self, branch: &str, name: &AccountName) -> Result<Vec<ChangeEntry>> {
+		self.log_impl_raw(branch, Some(name))
 	}
 
 	/// Full or filtered branch log. Used by the FFI and CLI.
-	pub fn log_impl(&self, branch: &str, filter: Option<&AccountName>) -> Result<Vec<ChangeEntry>> {
+	pub fn log_impl<K: BranchKind>(
+		&self,
+		branch: &BranchPath<K>,
+		filter: Option<&AccountName>,
+	) -> Result<Vec<ChangeEntry>> {
+		self.log_impl_raw(branch.as_str(), filter)
+	}
+
+	fn log_impl_raw(&self, branch: &str, filter: Option<&AccountName>) -> Result<Vec<ChangeEntry>> {
 		let txn = self.repo.pristine.txn_begin().map_err(|e| Error::Pijul(e.to_string()))?;
 		let channel_ref = match txn.load_channel(branch).map_err(|e| Error::Pijul(e.to_string()))? {
 			Some(c) => c,
@@ -464,7 +629,7 @@ impl PijulStore {
 		Ok(entries)
 	}
 
-	pub fn diff_entry_impl(
+	fn diff_entry_impl_raw(
 		&self,
 		branch: &str,
 		name: &AccountName,
@@ -485,7 +650,7 @@ impl PijulStore {
 			Some(h) => content_at(h)?,
 			None => {
 				let p = self.entry_path(branch, name);
-				if p.exists() { std::fs::read_to_string(&p)? } else { String::new() }
+				if p.exists() { toml::to_string_pretty(&self.read_entry(&p)?)? } else { String::new() }
 			}
 		};
 
@@ -499,7 +664,7 @@ impl PijulStore {
 		Ok(DiffResult { label: format!("{branch}/{name}"), lines: tokens })
 	}
 
-	pub fn snapshot_entry_at(
+	fn snapshot_entry_at_raw(
 		&self,
 		branch: &str,
 		name: &AccountName,
@@ -509,11 +674,12 @@ impl PijulStore {
 		if header.description.as_deref().map(|d| d.contains(name.as_str())) != Some(true) {
 			return Ok(None);
 		}
-		Ok(self.get(branch, name)?)
+		let path = self.entry_path(branch, name);
+		if path.exists() { Ok(Some(self.read_entry(&path)?)) } else { Ok(None) }
 	}
 
-	pub fn head_entry_hash(&self, branch: &str, name: &AccountName) -> Result<Option<Hash>> {
-		let entries = self.log_entry(branch, name)?;
+	fn head_entry_hash_raw(&self, branch: &str, name: &AccountName) -> Result<Option<Hash>> {
+		let entries = self.log_entry_raw(branch, name)?;
 		Ok(
 			entries
 				.into_iter()
