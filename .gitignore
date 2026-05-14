@@ -8,3 +8,6 @@ frontend/Sources/passwordFFI/include/module.modulemap
 
 # Swift build artifacts
 frontend/.build/
+/.direnv
+/libpijul-1.0.0-beta.11
+/pijul-1.0.0-beta.11
