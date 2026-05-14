@@ -1,9 +1,3 @@
-//! Iroh-backed P2P sync for the credential store.
-//!
-//! Concrete types, no trait abstraction. Two `IrohSync` instances can be
-//! connected in-process for integration tests — spin up both from
-//! `IrohSync::new()` and call `share_payload` / `receive_payload` directly.
-
 use std::sync::Arc;
 
 use anyhow::Result as AResult;
@@ -53,8 +47,6 @@ impl IrohSync {
 
 	fn docs(&self) -> AResult<&Docs> { Ok(&self.handles()?.docs) }
 
-	// ── share ─────────────────────────────────────────────────────────────────
-
 	/// Publish `payload` into a new iroh-docs document and return a
 	/// [`ShareTicket`] that the receiver can use to import it.
 	pub async fn share_payload(&self, payload: StorePayload) -> PwdResult<ShareTicket> {
@@ -74,8 +66,6 @@ impl IrohSync {
 
 		Ok(ShareTicket(ticket.to_string()))
 	}
-
-	// ── receive ───────────────────────────────────────────────────────────────
 
 	/// Import `ticket`, wait for the payload entry to arrive, and return the
 	/// raw [`StorePayload`] bytes.
@@ -175,9 +165,6 @@ impl IrohSyncHandle {
 	/// Returns `true` when the iroh node is currently running.
 	pub async fn is_active(&self) -> bool { self.inner.lock().await.is_some() }
 }
-
-// ── payload helpers
-// ───────────────────────────────────────────────────────────
 
 /// Serialise a [`crate::models::PasswordStore`] into a [`StorePayload`].
 pub fn encode_store(store: &crate::models::PasswordStore) -> PwdResult<StorePayload> {
