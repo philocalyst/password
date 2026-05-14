@@ -14,7 +14,8 @@ final class PasswordStoreViewModel {
     init() {
         let dir = ProcessInfo.processInfo.environment["PASSWORD_STORE_PATH"]
             ?? (FileManager.default.homeDirectoryForCurrentUser.path + "/.pwd")
-        store = try! PwdStore.open(storeDir: dir, branch: "main")
+        let passphrase = ProcessInfo.processInfo.environment["PWD_STORE_PASSPHRASE"] ?? ""
+        store = try! PwdStore.open(storeDir: dir, branch: "main", passphrase: passphrase)
         reload()
     }
 
